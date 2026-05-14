@@ -120,6 +120,7 @@ fn powershell_mutations_are_noops() {
     assert_no_output("Get-Content -LiteralPath input.txt | Set-Content -LiteralPath output.txt");
     assert_no_output("Get-Content -LiteralPath input.txt; Remove-Item -LiteralPath input.txt");
     assert_no_output("Get-Content -LiteralPath input.txt | Out-File -LiteralPath output.txt");
+    assert_no_output("Get-Content input.txt|Out-File output.txt");
     assert_no_output("Get-Content -LiteralPath input.txt > output.txt");
 }
 
@@ -133,6 +134,15 @@ fn get_content_redirects_to_rtk_read() {
     assert_deny(
         r#"Get-Content -TotalCount 14 'src\main.rs'"#,
         r#"rtk read src\main.rs --max-lines 14"#,
+    );
+    assert_deny("gc README.md", "rtk read README.md");
+    assert_deny(
+        "cat -Tail 20 README.md",
+        "rtk read README.md --tail-lines 20",
+    );
+    assert_deny(
+        "type -TotalCount 10 src\\rewrite.rs",
+        "rtk read src\\rewrite.rs --max-lines 10",
     );
     assert_deny(
         r#"powershell -NoProfile -Command Get-Content -LiteralPath 'src\main.rs' -TotalCount 80"#,
@@ -183,6 +193,11 @@ fn powershell_test_and_lint_wrappers_redirect_inner_tools() {
 #[test]
 fn select_string_redirects_to_rtk_rg() {
     assert_deny(
+        r#"Select-String -Path 'src\main.rs' -Pattern 'foo' -Context 2"#,
+        r#"rtk rg -n -C 2 "foo" src\main.rs"#,
+    );
+    assert_deny("sls foo src\\main.rs", r#"rtk rg -n "foo" src\main.rs"#);
+    assert_deny(
         r#"powershell -NoProfile -Command Select-String -Path 'src\main.rs' -Pattern 'function'"#,
         r#"rtk rg -n "function" src\main.rs"#,
     );
@@ -190,14 +205,89 @@ fn select_string_redirects_to_rtk_rg() {
         r#"powershell -NoProfile -Command Select-String -Path 'src\main.rs' -Pattern 'function' -Context 2"#,
         r#"rtk rg -n -C 2 "function" src\main.rs"#,
     );
+    assert_no_output("Select-String -Pattern foo");
+    assert_no_output(r#"Select-String -Path src\main.rs -Pattern foo -SimpleMatch"#);
 }
 
 #[test]
 fn get_child_item_redirects_to_rg_files() {
     assert_deny(
+        "Get-ChildItem -Path src -Recurse -File",
+        "rtk rg --files src",
+    );
+    assert_deny("gci src -Recurse -File", "rtk rg --files src");
+    assert_deny("dir src -Recurse -File", "rtk rg --files src");
+    assert_deny(
         "powershell -NoProfile -Command Get-ChildItem -Path src -Recurse -File",
         "rtk rg --files src",
     );
+    assert_no_output("dir");
+    assert_no_output("ls src");
+    assert_no_output("Get-ChildItem -Path src -File");
+    assert_no_output("dir src -Recurse");
+    assert_no_output("Get-ChildItem -Path src | Out-File files.txt");
+    assert_no_output("Get-ChildItem -Path src -Recurse -Directory");
+    assert_no_output("Get-ChildItem -Path src -Recurse -Filter *.rs");
+}
+
+#[test]
+fn pipelines_prioritize_search_over_read() {
+    assert_deny(
+        "Get-Content src\\rewrite.rs | Select-String -Pattern tokenize",
+        r#"rtk rg -n "tokenize" src\rewrite.rs"#,
+    );
+    assert_deny(
+        "Get-Content src\\rewrite.rs|Select-String -Pattern tokenize",
+        r#"rtk rg -n "tokenize" src\rewrite.rs"#,
+    );
+    assert_deny(
+        "gc src\\rewrite.rs | sls tokenize",
+        r#"rtk rg -n "tokenize" src\rewrite.rs"#,
+    );
+    assert_no_output(
+        "Get-Content src\\rewrite.rs | Select-Object -First 10 | Select-String tokenize",
+    );
+    assert_no_output("Get-Content input.txt | Out-File output.txt");
+}
+
+#[test]
+fn noisy_tool_allowlist_redirects_to_rtk() {
+    for tool in [
+        "dotnet",
+        "pnpm",
+        "pip",
+        "go",
+        "docker",
+        "npx",
+        "vitest",
+        "jest",
+        "tsc",
+        "ruff",
+        "mypy",
+        "playwright",
+        "gradlew",
+        "curl",
+    ] {
+        assert_deny(
+            &format!("{tool} --version"),
+            &format!("rtk {tool} --version"),
+        );
+    }
+
+    assert_deny("python -m pytest tests", "rtk pytest tests");
+    assert_deny("uv run pytest tests", "rtk pytest tests");
+    assert_no_output("python -m pip install pytest");
+    assert_no_output("uv pip install pytest");
+}
+
+#[test]
+fn cmd_findstr_redirects_when_simple_search() {
+    assert_deny(
+        "findstr /N tokenize src\\rewrite.rs",
+        r#"rtk rg -n "tokenize" src\rewrite.rs"#,
+    );
+    assert_no_output("findstr /S /N tokenize *.rs");
+    assert_no_output("findstr /R /C:\"foo bar\" *.rs");
 }
 
 #[test]

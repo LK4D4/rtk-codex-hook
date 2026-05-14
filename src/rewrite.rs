@@ -25,7 +25,31 @@ fn preferred_rtk_command(command: &str) -> bool {
     let second = tokens.get(1).map(|token| command_name(&token.text));
     matches!(
         second.as_deref(),
-        Some("git" | "rg" | "read" | "busted" | "luacheck")
+        Some(
+            "git"
+                | "rg"
+                | "read"
+                | "cargo"
+                | "gh"
+                | "npm"
+                | "pytest"
+                | "busted"
+                | "luacheck"
+                | "dotnet"
+                | "pnpm"
+                | "pip"
+                | "go"
+                | "docker"
+                | "npx"
+                | "vitest"
+                | "jest"
+                | "tsc"
+                | "ruff"
+                | "mypy"
+                | "playwright"
+                | "gradlew"
+                | "curl"
+        )
     ) || is_preferred_pwsh_wrapper(command)
 }
 
@@ -53,7 +77,12 @@ fn direct_powershell_redirect(command: &str) -> Option<String> {
     let tokens = tokenize(without_rtk);
     let first = tokens.first().map(|token| command_name(&token.text));
     match first.as_deref() {
-        Some("get-content") => content_redirect(without_rtk),
+        Some("get-content" | "gc" | "cat" | "type") => {
+            pipeline_select_string_redirect(without_rtk).or_else(|| content_redirect(without_rtk))
+        }
+        Some("select-string" | "sls") => select_string_redirect(without_rtk),
+        Some("get-childitem" | "gci" | "dir") => get_child_item_redirect(without_rtk),
+        Some("findstr") => findstr_redirect(without_rtk),
         _ => None,
     }
 }
@@ -71,7 +100,8 @@ fn powershell_redirect(command: &str) -> Option<String> {
         return None;
     }
 
-    content_redirect(&inner)
+    pipeline_select_string_redirect(&inner)
+        .or_else(|| content_redirect(&inner))
         .or_else(|| test_tool_redirect(&inner, preferred_pwsh))
         .or_else(|| select_string_redirect(&inner))
         .or_else(|| get_child_item_redirect(&inner))
@@ -180,8 +210,11 @@ fn content_redirect(command: &str) -> Option<String> {
     let tokens = tokenize(command);
     if !tokens
         .iter()
-        .any(|token| command_name(&token.text) == "get-content")
+        .any(|token| is_get_content_command(&command_name(&token.text)))
     {
+        return None;
+    }
+    if piped_select_string(&tokens) {
         return None;
     }
 
@@ -200,7 +233,7 @@ fn get_content_path(command: &str) -> Option<String> {
         let tokens = tokenize(command);
         let content_index = tokens
             .iter()
-            .position(|token| command_name(&token.text) == "get-content")?;
+            .position(|token| is_get_content_command(&command_name(&token.text)))?;
         let value_options = [
             "-totalcount",
             "-tail",
@@ -319,6 +352,23 @@ fn find_test_tool(tokens: &[Token]) -> Option<(usize, String)> {
     None
 }
 
+fn is_get_content_command(name: &str) -> bool {
+    matches!(name, "get-content" | "gc" | "cat" | "type")
+}
+
+fn is_select_string_command(name: &str) -> bool {
+    matches!(name, "select-string" | "sls")
+}
+
+fn piped_select_string(tokens: &[Token]) -> bool {
+    let Some(pipe_index) = tokens.iter().position(|token| token.text == "|") else {
+        return false;
+    };
+    tokens[pipe_index + 1..]
+        .iter()
+        .any(|token| is_select_string_command(&command_name(&token.text)))
+}
+
 fn path_setup_prefix(inner: &str) -> Option<String> {
     let segments = command_segments(inner);
     let first = segments.first()?.trim();
@@ -329,15 +379,65 @@ fn path_setup_prefix(inner: &str) -> Option<String> {
     }
 }
 
-fn select_string_redirect(inner: &str) -> Option<String> {
-    if !tokenize(inner)
+fn pipeline_select_string_redirect(inner: &str) -> Option<String> {
+    let tokens = tokenize(inner);
+    let pipe_index = tokens.iter().position(|token| token.text == "|")?;
+    if has_unsupported_options(
+        &tokens[..pipe_index],
+        &["-literalpath", "-path", "-totalcount", "-tail"],
+    ) {
+        return None;
+    }
+    let content_index = tokens[..pipe_index]
         .iter()
-        .any(|token| command_name(&token.text) == "select-string")
+        .position(|token| is_get_content_command(&command_name(&token.text)))?;
+    let select_index = tokens[pipe_index + 1..]
+        .iter()
+        .position(|token| is_select_string_command(&command_name(&token.text)))?
+        + pipe_index
+        + 1;
+    if tokens[pipe_index + 1..select_index]
+        .iter()
+        .any(|token| token.text == "|")
     {
         return None;
     }
-    let path = path_argument(inner, &["-Path"])?;
-    let pattern = path_argument(inner, &["-Pattern"])?;
+    if tokens[select_index..]
+        .iter()
+        .skip(1)
+        .any(|token| token.text == "|")
+    {
+        return None;
+    }
+    if has_unsupported_options(&tokens[select_index..], &["-path", "-pattern", "-context"]) {
+        return None;
+    }
+
+    let path = get_content_path(&inner[tokens[content_index].start..tokens[pipe_index].start])?;
+    let search_command = &inner[tokens[select_index].start..];
+    let pattern = select_string_pattern(search_command)?;
+    let mut suggestion = "rtk rg -n".to_string();
+    if let Some(context) = context_number(search_command) {
+        suggestion.push_str(&format!(" -C {context}"));
+    }
+    suggestion.push_str(&format!(
+        " {} {}",
+        quote_pattern(&pattern),
+        quote_arg(&path)
+    ));
+    Some(suggestion)
+}
+
+fn select_string_redirect(inner: &str) -> Option<String> {
+    let tokens = tokenize(inner);
+    let index = tokens
+        .iter()
+        .position(|token| is_select_string_command(&command_name(&token.text)))?;
+    if has_unsupported_options(&tokens[index..], &["-path", "-pattern", "-context"]) {
+        return None;
+    }
+    let path = select_string_path(inner, index)?;
+    let pattern = select_string_pattern(inner)?;
     let mut suggestion = "rtk rg -n".to_string();
     if let Some(context) = context_number(inner) {
         suggestion.push_str(&format!(" -C {context}"));
@@ -348,6 +448,23 @@ fn select_string_redirect(inner: &str) -> Option<String> {
         quote_arg(&path)
     ));
     Some(suggestion)
+}
+
+fn select_string_path(command: &str, command_index: usize) -> Option<String> {
+    path_argument(command, &["-Path"]).or_else(|| {
+        let tokens = tokenize(command);
+        positional_after_command(&tokens, command_index, 1)
+    })
+}
+
+fn select_string_pattern(command: &str) -> Option<String> {
+    path_argument(command, &["-Pattern"]).or_else(|| {
+        let tokens = tokenize(command);
+        let command_index = tokens
+            .iter()
+            .position(|token| is_select_string_command(&command_name(&token.text)))?;
+        positional_after_command(&tokens, command_index, 0)
+    })
 }
 
 fn context_number(inner: &str) -> Option<u64> {
@@ -363,14 +480,80 @@ fn context_number(inner: &str) -> Option<u64> {
 }
 
 fn get_child_item_redirect(inner: &str) -> Option<String> {
-    if !tokenize(inner)
+    let tokens = tokenize(inner);
+    let command_index = tokens.iter().position(|token| {
+        matches!(
+            command_name(&token.text).as_str(),
+            "get-childitem" | "gci" | "dir"
+        )
+    })?;
+    if has_unsupported_options(
+        &tokens[command_index..],
+        &["-path", "-literalpath", "-recurse", "-file"],
+    ) {
+        return None;
+    }
+    let command_tokens = tokens[command_index..]
         .iter()
-        .any(|token| command_name(&token.text) == "get-childitem")
+        .take_while(|token| token.text != "|" && token.text != ";")
+        .cloned()
+        .collect::<Vec<_>>();
+    if !has_option(&command_tokens, "-recurse") || !has_option(&command_tokens, "-file") {
+        return None;
+    }
+    let path = path_argument(inner, &["-LiteralPath", "-Path"])
+        .or_else(|| positional_after_command(&tokens, command_index, 0))?;
+    Some(format!("rtk rg --files {}", quote_arg(&path)))
+}
+
+fn has_unsupported_options(tokens: &[Token], supported: &[&str]) -> bool {
+    tokens
+        .iter()
+        .take_while(|token| token.text != "|" && token.text != ";")
+        .any(|token| {
+            token.text.starts_with('-')
+                && !supported.contains(&token.text.to_ascii_lowercase().as_str())
+        })
+}
+
+fn has_option(tokens: &[Token], name: &str) -> bool {
+    tokens
+        .iter()
+        .any(|token| token.text.eq_ignore_ascii_case(name))
+}
+
+fn findstr_redirect(command: &str) -> Option<String> {
+    let tokens = tokenize(command);
+    if tokens
+        .first()
+        .is_none_or(|token| command_name(&token.text) != "findstr")
     {
         return None;
     }
-    let path = path_argument(inner, &["-LiteralPath", "-Path"]).unwrap_or_else(|| ".".to_string());
-    Some(format!("rtk rg --files {}", quote_arg(&path)))
+    let mut args = Vec::new();
+    for token in tokens.iter().skip(1) {
+        let lower = token.text.to_ascii_lowercase();
+        if lower == "/s" {
+            return None;
+        }
+        if lower == "/n" {
+            continue;
+        }
+        if lower.starts_with('/') {
+            return None;
+        }
+        args.push(token.text.clone());
+    }
+    if args.len() < 2 {
+        return None;
+    }
+    let pattern = args.remove(0);
+    let paths = args
+        .into_iter()
+        .map(|arg| quote_arg(&arg))
+        .collect::<Vec<_>>()
+        .join(" ");
+    Some(format!("rtk rg -n {} {}", quote_pattern(&pattern), paths))
 }
 
 fn rg_redirect(command: &str) -> Option<String> {
@@ -437,7 +620,7 @@ fn rg_redirect(command: &str) -> Option<String> {
         .find_map(|(idx, arg)| is_search_path_token(arg).then_some(idx))
         .unwrap_or(args.len());
 
-    let pattern = args[index..path_start].join(" ").replace("\\|", "|");
+    let pattern = join_rg_pattern(&args[index..path_start]).replace("\\|", "|");
     let mut parts = vec!["rtk".to_string(), "rg".to_string()];
     parts.extend(options);
     parts.push(quote_pattern(&pattern));
@@ -449,11 +632,68 @@ fn common_rewrite(command: &str) -> Option<String> {
     let tokens = tokenize(command);
     let first = tokens.first().map(|token| command_name(&token.text));
     match first.as_deref() {
-        Some("git" | "cargo" | "gh" | "npm" | "pytest" | "busted" | "luacheck") => {
-            Some(format!("rtk {command}"))
+        Some("python") if python_pytest_args(&tokens).is_some() => {
+            let args = python_pytest_args(&tokens)?;
+            Some(format!("rtk pytest{args}"))
         }
+        Some("uv") if uv_pytest_args(&tokens).is_some() => {
+            let args = uv_pytest_args(&tokens)?;
+            Some(format!("rtk pytest{args}"))
+        }
+        Some(
+            "git" | "cargo" | "gh" | "npm" | "pytest" | "busted" | "luacheck" | "dotnet" | "pnpm"
+            | "pip" | "go" | "docker" | "npx" | "vitest" | "jest" | "tsc" | "ruff" | "mypy"
+            | "playwright" | "gradlew" | "curl",
+        ) => Some(format!("rtk {command}")),
         _ => None,
     }
+}
+
+fn python_pytest_args(tokens: &[Token]) -> Option<String> {
+    if tokens.len() >= 3 && tokens[1].text == "-m" && command_name(&tokens[2].text) == "pytest" {
+        Some(join_args(&tokens[3..]))
+    } else {
+        None
+    }
+}
+
+fn uv_pytest_args(tokens: &[Token]) -> Option<String> {
+    if tokens.len() >= 3
+        && tokens[1].text.eq_ignore_ascii_case("run")
+        && command_name(&tokens[2].text) == "pytest"
+    {
+        Some(join_args(&tokens[3..]))
+    } else {
+        None
+    }
+}
+
+fn join_args(tokens: &[Token]) -> String {
+    let args = tokens
+        .iter()
+        .map(|token| quote_arg(&token.text))
+        .collect::<Vec<_>>()
+        .join(" ");
+    if args.is_empty() {
+        String::new()
+    } else {
+        format!(" {args}")
+    }
+}
+
+fn join_rg_pattern(args: &[String]) -> String {
+    let mut pattern = String::new();
+    for arg in args {
+        if arg == "|" {
+            pattern.push('|');
+        } else {
+            if !pattern.is_empty() && !pattern.ends_with('|') {
+                pattern.push(' ');
+            }
+            pattern.push_str(arg);
+        }
+    }
+    pattern
 }
 
 fn rtk_rewrite(command: &str) -> Option<String> {
@@ -465,15 +705,57 @@ fn rtk_rewrite(command: &str) -> Option<String> {
         .arg(command)
         .output()
         .ok()?;
-    if !output.status.success() {
-        return None;
-    }
     let rewrite = String::from_utf8(output.stdout).ok()?.trim().to_string();
-    if rewrite.is_empty() || rewrite == command {
+    if rewrite.is_empty()
+        || rewrite == command
+        || !rewrite.starts_with("rtk ")
+        || rewrite.trim_start_matches("rtk ").trim() == command
+    {
         None
     } else {
         Some(rewrite)
     }
+}
+
+fn positional_after_command(
+    tokens: &[Token],
+    command_index: usize,
+    position: usize,
+) -> Option<String> {
+    let value_options = [
+        "-path",
+        "-literalpath",
+        "-pattern",
+        "-context",
+        "-totalcount",
+        "-tail",
+        "-readcount",
+        "-encoding",
+        "-delimiter",
+        "-stream",
+    ];
+    let mut seen = 0;
+    let mut skip_next = false;
+    for token in tokens.iter().skip(command_index + 1) {
+        if token.text == "|" || token.text == ";" {
+            break;
+        }
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        if token.text.starts_with('-') {
+            if value_options.contains(&token.text.to_ascii_lowercase().as_str()) {
+                skip_next = true;
+            }
+            continue;
+        }
+        if seen == position {
+            return Some(token.text.clone());
+        }
+        seen += 1;
+    }
+    None
 }
 
 fn path_argument(command: &str, names: &[&str]) -> Option<String> {
@@ -562,7 +844,7 @@ fn tokenize(command: &str) -> Vec<Token> {
         } else {
             text.push(ch);
             while let Some(&(idx, c)) = iter.peek() {
-                if c.is_whitespace() || c == ';' {
+                if c.is_whitespace() || c == ';' || c == '|' {
                     break;
                 }
                 iter.next();
@@ -620,11 +902,11 @@ mod tests {
     #[test]
     fn tokenizer_keeps_quotes_and_pipes_inside_words() {
         assert_eq!(
-            tokenize(r#"rg -n "foo bar" foo|bar src"#)
+            tokenize(r#"rg -n "foo|bar" foo|bar src"#)
                 .into_iter()
                 .map(|token| token.text)
                 .collect::<Vec<_>>(),
-            vec!["rg", "-n", "foo bar", "foo|bar", "src"]
+            vec!["rg", "-n", "foo|bar", "foo", "|", "bar", "src"]
         );
     }
 }

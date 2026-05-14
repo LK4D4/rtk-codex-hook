@@ -58,15 +58,29 @@ The process exits `0` for both deny suggestions and no-op cases.
 - Already preferred RTK commands are left alone, such as `rtk git status --short`.
 - Mutating PowerShell commands are left alone, including `Remove-Item`,
   `Set-Content`, `Add-Content`, `New-Item`, `Move-Item`, and `Copy-Item`.
-- Common raw tools can be prefixed through RTK, such as `git status --short` to
-  `rtk git status --short`.
-- Direct and PowerShell-wrapped `Get-Content` reads become `rtk read`, preserving
-  top or tail windows with `--max-lines` and `--tail-lines`.
+- Common raw noisy tools can be prefixed through RTK, such as
+  `git status --short` to `rtk git status --short`. The allowlist includes
+  `git`, `cargo`, `gh`, `npm`, `pytest`, `busted`, `luacheck`, `dotnet`,
+  `pnpm`, `pip`, `go`, `docker`, `npx`, `vitest`, `jest`, `tsc`, `ruff`,
+  `mypy`, `playwright`, `gradlew`, and `curl`.
+- `python -m pytest ...` and `uv run pytest ...` become direct `rtk pytest ...`
+  suggestions.
+- Direct and PowerShell-wrapped `Get-Content` reads, including `gc`, `cat`, and
+  `type`, become `rtk read`, preserving top or tail windows with `--max-lines`
+  and `--tail-lines`.
+- `Get-Content ... | Select-String ...` pipelines, including alias forms, become
+  `rtk rg -n` searches rather than `rtk read`.
 - PowerShell wrappers around `busted` and `luacheck` become `rtk pwsh` wrappers
   with `rtk` applied to the noisy inner tool.
-- PowerShell `Select-String` becomes `rtk rg -n`, with `-Context N` mapped to
-  `-C N`.
-- PowerShell `Get-ChildItem` file discovery becomes `rtk rg --files`.
+- Direct and wrapped PowerShell `Select-String`/`sls` becomes `rtk rg -n` for
+  simple `-Path`/`-Pattern` forms, with optional `-Context N` mapped to `-C N`.
+  Other switches are left alone.
+- Direct and wrapped PowerShell `Get-ChildItem`/`gci`/`dir` file discovery with
+  an explicit path plus both `-Recurse` and `-File` becomes `rtk rg --files`.
+  Other switches such as `-Directory` or `-Filter` are left alone, as are bare
+  Windows aliases such as `ls` or `dir` with no path.
+- Simple non-recursive `findstr /N pattern path` searches become `rtk rg -n`;
+  recursive `/S` searches and other complex `findstr` modes are left alone.
 - Raw `rg` becomes `rtk rg`, and search patterns are quoted so PowerShell does
   not turn unquoted `|` alternation into a pipeline.
 
