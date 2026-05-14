@@ -1,5 +1,7 @@
 # rtk-codex-hook
 
+[![CI](https://github.com/LK4D4/rtk-windows-codex-hook/actions/workflows/ci.yml/badge.svg)](https://github.com/LK4D4/rtk-windows-codex-hook/actions/workflows/ci.yml)
+
 Windows-first Codex `PreToolUse` hook for suggesting lower-token RTK commands.
 
 The binary reads Codex hook JSON from stdin. It prints JSON only when it wants
