@@ -58,11 +58,18 @@ The process exits `0` for both deny suggestions and no-op cases.
 - Already preferred RTK commands are left alone, such as `rtk git status --short`.
 - Mutating PowerShell commands are left alone, including `Remove-Item`,
   `Set-Content`, `Add-Content`, `New-Item`, `Move-Item`, and `Copy-Item`.
-- Common raw noisy tools can be prefixed through RTK, such as
-  `git status --short` to `rtk git status --short`. The allowlist includes
-  `git`, `cargo`, `gh`, `npm`, `pytest`, `busted`, `luacheck`, `dotnet`,
-  `pnpm`, `pip`, `go`, `docker`, `npx`, `vitest`, `jest`, `tsc`, `ruff`,
-  `mypy`, `playwright`, `gradlew`, and `curl`.
+- Windows and PowerShell-specific reads/searches are handled locally first.
+  Generic cross-platform tools are delegated to `rtk rewrite`, such as
+  `git status --short` to `rtk git status --short` and `ls src` to
+  `rtk ls src`.
+- If `rtk rewrite` is unavailable or returns no suggestion, a small local
+  fallback preserves legacy redirects for common noisy tools such as `git`,
+  `cargo`, `npm`, `pytest`, `busted`, `luacheck`, `dotnet`, `pnpm`, `pip`, `go`,
+  `docker`, `npx`, `vitest`, `jest`, `tsc`, `ruff`, `mypy`, `playwright`,
+  `gradlew`, and `curl`.
+- RTK's generic safety skips are preserved. For example, `gh` commands with
+  `--json`, `--jq`, or `--template` are left alone so structured output remains
+  raw.
 - `python -m pytest ...` and `uv run pytest ...` become direct `rtk pytest ...`
   suggestions.
 - Direct and PowerShell-wrapped `Get-Content` reads, including `gc`, `cat`, and
@@ -82,8 +89,8 @@ The process exits `0` for both deny suggestions and no-op cases.
 - Simple non-recursive `findstr /N pattern path` searches become `rtk grep -n`;
   recursive `/S` searches and other complex `findstr` modes are left alone.
 - Raw `rg` content searches become `rtk grep`, and `rg --files` file discovery
-  becomes `rtk find`. Search patterns are quoted so PowerShell does not turn
-  unquoted `|` alternation into a pipeline.
+  becomes `rtk find`. These stay local because the hook quotes PowerShell-
+  sensitive patterns and maps file discovery to `rtk find`.
 
 The rewrite rules are intentionally generic. There is no repo-specific or
 language-specific policy in this hook; smarter language-aware behavior can be

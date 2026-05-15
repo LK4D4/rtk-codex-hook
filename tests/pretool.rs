@@ -1,5 +1,7 @@
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 
 fn hook_payload(command: &str) -> String {
     serde_json::json!({
@@ -17,8 +19,72 @@ fn hook_payload(command: &str) -> String {
     .to_string()
 }
 
+fn fake_rtk_path() -> &'static PathBuf {
+    static FAKE_RTK: OnceLock<PathBuf> = OnceLock::new();
+    FAKE_RTK.get_or_init(|| {
+        let dir = std::env::temp_dir().join(format!("rtk-codex-hook-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("fake rtk dir");
+        let path = dir.join(if cfg!(windows) { "rtk.cmd" } else { "rtk" });
+
+        if cfg!(windows) {
+            std::fs::write(
+                &path,
+                r#"@echo off
+if not "%~1"=="rewrite" exit /b 1
+if "%~2"=="ls src" (
+  <nul set /p=rtk ls src
+  exit /b 3
+)
+if "%~2"=="uv pip install pytest" (
+  <nul set /p=rtk uv pip install pytest
+  exit /b 3
+)
+if "%~2"=="gh pr view --json title" exit /b 1
+exit /b 1
+"#,
+            )
+            .expect("write fake rtk");
+        } else {
+            std::fs::write(
+                &path,
+                r#"#!/bin/sh
+if [ "$1" != "rewrite" ]; then exit 1; fi
+case "$2" in
+  "ls src")
+    printf '%s' 'rtk ls src'
+    exit 3
+    ;;
+  "uv pip install pytest")
+    printf '%s' 'rtk uv pip install pytest'
+    exit 3
+    ;;
+  "gh pr view --json title")
+    exit 1
+    ;;
+esac
+exit 1
+"#,
+            )
+            .expect("write fake rtk");
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut permissions = std::fs::metadata(&path)
+                    .expect("fake rtk metadata")
+                    .permissions();
+                permissions.set_mode(0o755);
+                std::fs::set_permissions(&path, permissions).expect("chmod fake rtk");
+            }
+        }
+
+        path
+    })
+}
+
 fn run_hook(payload: &str) -> String {
     let mut child = Command::new(env!("CARGO_BIN_EXE_rtk-codex-hook"))
+        .env("RTK_CODEX_HOOK_RTK_BIN", fake_rtk_path())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -129,6 +195,8 @@ fn powershell_mutations_are_noops() {
 #[test]
 fn generic_rtk_rewrite_fallbacks_apply_to_common_tools() {
     assert_deny("git status --short", "rtk git status --short");
+    assert_deny("ls src", "rtk ls src");
+    assert_no_output("gh pr view --json title");
 }
 
 #[test]
@@ -221,7 +289,7 @@ fn get_child_item_redirects_to_rtk_find() {
         "rtk find src",
     );
     assert_no_output("dir");
-    assert_no_output("ls src");
+    assert_deny("ls src", "rtk ls src");
     assert_no_output("Get-ChildItem -Path src -File");
     assert_no_output("dir src -Recurse");
     assert_no_output("Get-ChildItem -Path src | Out-File files.txt");
@@ -276,7 +344,7 @@ fn noisy_tool_allowlist_redirects_to_rtk() {
     assert_deny("python -m pytest tests", "rtk pytest tests");
     assert_deny("uv run pytest tests", "rtk pytest tests");
     assert_no_output("python -m pip install pytest");
-    assert_no_output("uv pip install pytest");
+    assert_deny("uv pip install pytest", "rtk uv pip install pytest");
 }
 
 #[test]

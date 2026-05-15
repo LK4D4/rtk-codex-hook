@@ -16,8 +16,8 @@ pub fn suggest(command: &str) -> Option<String> {
     direct_powershell_redirect(command)
         .or_else(|| powershell_redirect(command))
         .or_else(|| rg_redirect(command))
-        .or_else(|| common_rewrite(command))
         .or_else(|| rtk_rewrite(command))
+        .or_else(|| local_rtk_miss_fallback(command))
 }
 
 fn preferred_rtk_command(command: &str) -> bool {
@@ -664,7 +664,7 @@ fn rg_files_redirect(args: &[String]) -> Option<String> {
     Some(parts.join(" "))
 }
 
-fn common_rewrite(command: &str) -> Option<String> {
+fn local_rtk_miss_fallback(command: &str) -> Option<String> {
     let tokens = tokenize(command);
     let first = tokens.first().map(|token| command_name(&token.text));
     match first.as_deref() {
@@ -677,9 +677,9 @@ fn common_rewrite(command: &str) -> Option<String> {
             Some(format!("rtk pytest{args}"))
         }
         Some(
-            "git" | "cargo" | "gh" | "npm" | "pytest" | "busted" | "luacheck" | "dotnet" | "pnpm"
-            | "pip" | "go" | "docker" | "npx" | "vitest" | "jest" | "tsc" | "ruff" | "mypy"
-            | "playwright" | "gradlew" | "curl",
+            "git" | "cargo" | "npm" | "pytest" | "busted" | "luacheck" | "dotnet" | "pnpm" | "pip"
+            | "go" | "docker" | "npx" | "vitest" | "jest" | "tsc" | "ruff" | "mypy" | "playwright"
+            | "gradlew" | "curl",
         ) => Some(format!("rtk {command}")),
         _ => None,
     }
@@ -736,17 +736,14 @@ fn rtk_rewrite(command: &str) -> Option<String> {
     if starts_with_rtk(command) {
         return None;
     }
-    let output = Command::new("rtk")
+    let rtk = std::env::var_os("RTK_CODEX_HOOK_RTK_BIN").unwrap_or_else(|| "rtk".into());
+    let output = Command::new(rtk)
         .arg("rewrite")
         .arg(command)
         .output()
         .ok()?;
     let rewrite = String::from_utf8(output.stdout).ok()?.trim().to_string();
-    if rewrite.is_empty()
-        || rewrite == command
-        || !rewrite.starts_with("rtk ")
-        || rewrite.trim_start_matches("rtk ").trim() == command
-    {
+    if rewrite.is_empty() || rewrite == command || !rewrite.starts_with("rtk ") {
         None
     } else {
         Some(rewrite)
