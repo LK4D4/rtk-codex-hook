@@ -27,7 +27,8 @@ fn preferred_rtk_command(command: &str) -> bool {
         second.as_deref(),
         Some(
             "git"
-                | "rg"
+                | "grep"
+                | "find"
                 | "read"
                 | "cargo"
                 | "gh"
@@ -416,15 +417,14 @@ fn pipeline_select_string_redirect(inner: &str) -> Option<String> {
     let path = get_content_path(&inner[tokens[content_index].start..tokens[pipe_index].start])?;
     let search_command = &inner[tokens[select_index].start..];
     let pattern = select_string_pattern(search_command)?;
-    let mut suggestion = "rtk rg -n".to_string();
+    let mut suggestion = format!(
+        "rtk grep -n {} {}",
+        quote_pattern(&pattern),
+        quote_arg(&path)
+    );
     if let Some(context) = context_number(search_command) {
         suggestion.push_str(&format!(" -C {context}"));
     }
-    suggestion.push_str(&format!(
-        " {} {}",
-        quote_pattern(&pattern),
-        quote_arg(&path)
-    ));
     Some(suggestion)
 }
 
@@ -438,15 +438,14 @@ fn select_string_redirect(inner: &str) -> Option<String> {
     }
     let path = select_string_path(inner, index)?;
     let pattern = select_string_pattern(inner)?;
-    let mut suggestion = "rtk rg -n".to_string();
+    let mut suggestion = format!(
+        "rtk grep -n {} {}",
+        quote_pattern(&pattern),
+        quote_arg(&path)
+    );
     if let Some(context) = context_number(inner) {
         suggestion.push_str(&format!(" -C {context}"));
     }
-    suggestion.push_str(&format!(
-        " {} {}",
-        quote_pattern(&pattern),
-        quote_arg(&path)
-    ));
     Some(suggestion)
 }
 
@@ -503,7 +502,7 @@ fn get_child_item_redirect(inner: &str) -> Option<String> {
     }
     let path = path_argument(inner, &["-LiteralPath", "-Path"])
         .or_else(|| positional_after_command(&tokens, command_index, 0))?;
-    Some(format!("rtk rg --files {}", quote_arg(&path)))
+    Some(format!("rtk find {}", quote_arg(&path)))
 }
 
 fn has_unsupported_options(tokens: &[Token], supported: &[&str]) -> bool {
@@ -553,11 +552,12 @@ fn findstr_redirect(command: &str) -> Option<String> {
         .map(|arg| quote_arg(&arg))
         .collect::<Vec<_>>()
         .join(" ");
-    Some(format!("rtk rg -n {} {}", quote_pattern(&pattern), paths))
+    Some(format!("rtk grep -n {} {}", quote_pattern(&pattern), paths))
 }
 
 fn rg_redirect(command: &str) -> Option<String> {
-    let tokens = tokenize(command);
+    let without_rtk = strip_rtk_prefix(command).unwrap_or(command);
+    let tokens = tokenize(without_rtk);
     if tokens
         .first()
         .is_none_or(|token| command_name(&token.text) != "rg")
@@ -573,13 +573,7 @@ fn rg_redirect(command: &str) -> Option<String> {
         return None;
     }
     if args.iter().any(|arg| arg == "--files") {
-        return Some(format!(
-            "rtk rg {}",
-            args.iter()
-                .map(|arg| quote_arg(arg))
-                .collect::<Vec<_>>()
-                .join(" ")
-        ));
+        return rg_files_redirect(&args);
     }
 
     let value_options = [
@@ -599,18 +593,25 @@ fn rg_redirect(command: &str) -> Option<String> {
         "--type-not",
     ];
 
-    let mut options = Vec::new();
+    let mut rtk_options = Vec::new();
+    let mut extra_options = Vec::new();
     let mut index = 0;
     while index < args.len() && args[index].starts_with('-') {
-        options.push(args[index].clone());
-        if value_options.contains(&args[index].as_str()) && index + 1 < args.len() {
+        let option = args[index].clone();
+        let option_takes_value = value_options.contains(&option.as_str()) && index + 1 < args.len();
+        if matches!(option.as_str(), "-n" | "--line-number") {
+            rtk_options.push("-n".to_string());
+        } else {
+            extra_options.push(option);
+        }
+        if option_takes_value {
             index += 1;
-            options.push(args[index].clone());
+            extra_options.push(args[index].clone());
         }
         index += 1;
     }
     if index >= args.len() {
-        return Some(format!("rtk rg {}", args.join(" ")));
+        return None;
     }
 
     let path_start = args
@@ -621,10 +622,45 @@ fn rg_redirect(command: &str) -> Option<String> {
         .unwrap_or(args.len());
 
     let pattern = join_rg_pattern(&args[index..path_start]).replace("\\|", "|");
-    let mut parts = vec!["rtk".to_string(), "rg".to_string()];
-    parts.extend(options);
+    let mut parts = vec!["rtk".to_string(), "grep".to_string()];
+    parts.extend(rtk_options);
     parts.push(quote_pattern(&pattern));
-    parts.extend(args[path_start..].iter().map(|arg| quote_arg(arg)));
+    let has_path = path_start < args.len();
+    if has_path {
+        parts.extend(args[path_start..].iter().map(|arg| quote_arg(arg)));
+    } else if !extra_options.is_empty() {
+        parts.push(".".to_string());
+    }
+    parts.extend(extra_options.into_iter().map(|arg| quote_arg(&arg)));
+    Some(parts.join(" "))
+}
+
+fn rg_files_redirect(args: &[String]) -> Option<String> {
+    let mut path: Option<String> = None;
+    let mut glob: Option<String> = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--files" => {}
+            "-g" | "--glob" => {
+                if glob.is_some() {
+                    return None;
+                }
+                index += 1;
+                glob = args.get(index).cloned();
+            }
+            arg if arg.starts_with('-') => return None,
+            arg => path = Some(arg.to_string()),
+        }
+        index += 1;
+    }
+
+    let path = path.unwrap_or_else(|| ".".to_string());
+    let mut parts = vec!["rtk".to_string(), "find".to_string(), quote_arg(&path)];
+    if let Some(glob) = glob {
+        parts.push("-name".to_string());
+        parts.push(quote_arg(&glob));
+    }
     Some(parts.join(" "))
 }
 

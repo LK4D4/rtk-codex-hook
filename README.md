@@ -69,20 +69,21 @@ The process exits `0` for both deny suggestions and no-op cases.
   `type`, become `rtk read`, preserving top or tail windows with `--max-lines`
   and `--tail-lines`.
 - `Get-Content ... | Select-String ...` pipelines, including alias forms, become
-  `rtk rg -n` searches rather than `rtk read`.
+  `rtk grep -n` searches rather than `rtk read`.
 - PowerShell wrappers around `busted` and `luacheck` become `rtk pwsh` wrappers
   with `rtk` applied to the noisy inner tool.
-- Direct and wrapped PowerShell `Select-String`/`sls` becomes `rtk rg -n` for
+- Direct and wrapped PowerShell `Select-String`/`sls` becomes `rtk grep -n` for
   simple `-Path`/`-Pattern` forms, with optional `-Context N` mapped to `-C N`.
   Other switches are left alone.
 - Direct and wrapped PowerShell `Get-ChildItem`/`gci`/`dir` file discovery with
-  an explicit path plus both `-Recurse` and `-File` becomes `rtk rg --files`.
+  an explicit path plus both `-Recurse` and `-File` becomes `rtk find`.
   Other switches such as `-Directory` or `-Filter` are left alone, as are bare
   Windows aliases such as `ls` or `dir` with no path.
-- Simple non-recursive `findstr /N pattern path` searches become `rtk rg -n`;
+- Simple non-recursive `findstr /N pattern path` searches become `rtk grep -n`;
   recursive `/S` searches and other complex `findstr` modes are left alone.
-- Raw `rg` becomes `rtk rg`, and search patterns are quoted so PowerShell does
-  not turn unquoted `|` alternation into a pipeline.
+- Raw `rg` content searches become `rtk grep`, and `rg --files` file discovery
+  becomes `rtk find`. Search patterns are quoted so PowerShell does not turn
+  unquoted `|` alternation into a pipeline.
 
 The rewrite rules are intentionally generic. There is no repo-specific or
 language-specific policy in this hook; smarter language-aware behavior can be

@@ -97,6 +97,8 @@ fn fails_open_for_non_pretooluse_and_bad_payloads() {
 #[test]
 fn already_good_commands_are_noops() {
     assert_no_output("rtk git status --short");
+    assert_no_output(r#"rtk grep -n "foo" src"#);
+    assert_no_output("rtk find src");
     assert_no_output(
         r#"rtk pwsh -NoProfile -Command '$env:PATH="$env:APPDATA\luarocks\bin;$env:PATH"; rtk busted spec'"#,
     );
@@ -191,35 +193,32 @@ fn powershell_test_and_lint_wrappers_redirect_inner_tools() {
 }
 
 #[test]
-fn select_string_redirects_to_rtk_rg() {
+fn select_string_redirects_to_rtk_grep() {
     assert_deny(
         r#"Select-String -Path 'src\main.rs' -Pattern 'foo' -Context 2"#,
-        r#"rtk rg -n -C 2 "foo" src\main.rs"#,
+        r#"rtk grep -n "foo" src\main.rs -C 2"#,
     );
-    assert_deny("sls foo src\\main.rs", r#"rtk rg -n "foo" src\main.rs"#);
+    assert_deny("sls foo src\\main.rs", r#"rtk grep -n "foo" src\main.rs"#);
     assert_deny(
         r#"powershell -NoProfile -Command Select-String -Path 'src\main.rs' -Pattern 'function'"#,
-        r#"rtk rg -n "function" src\main.rs"#,
+        r#"rtk grep -n "function" src\main.rs"#,
     );
     assert_deny(
         r#"powershell -NoProfile -Command Select-String -Path 'src\main.rs' -Pattern 'function' -Context 2"#,
-        r#"rtk rg -n -C 2 "function" src\main.rs"#,
+        r#"rtk grep -n "function" src\main.rs -C 2"#,
     );
     assert_no_output("Select-String -Pattern foo");
     assert_no_output(r#"Select-String -Path src\main.rs -Pattern foo -SimpleMatch"#);
 }
 
 #[test]
-fn get_child_item_redirects_to_rg_files() {
-    assert_deny(
-        "Get-ChildItem -Path src -Recurse -File",
-        "rtk rg --files src",
-    );
-    assert_deny("gci src -Recurse -File", "rtk rg --files src");
-    assert_deny("dir src -Recurse -File", "rtk rg --files src");
+fn get_child_item_redirects_to_rtk_find() {
+    assert_deny("Get-ChildItem -Path src -Recurse -File", "rtk find src");
+    assert_deny("gci src -Recurse -File", "rtk find src");
+    assert_deny("dir src -Recurse -File", "rtk find src");
     assert_deny(
         "powershell -NoProfile -Command Get-ChildItem -Path src -Recurse -File",
-        "rtk rg --files src",
+        "rtk find src",
     );
     assert_no_output("dir");
     assert_no_output("ls src");
@@ -234,15 +233,15 @@ fn get_child_item_redirects_to_rg_files() {
 fn pipelines_prioritize_search_over_read() {
     assert_deny(
         "Get-Content src\\rewrite.rs | Select-String -Pattern tokenize",
-        r#"rtk rg -n "tokenize" src\rewrite.rs"#,
+        r#"rtk grep -n "tokenize" src\rewrite.rs"#,
     );
     assert_deny(
         "Get-Content src\\rewrite.rs|Select-String -Pattern tokenize",
-        r#"rtk rg -n "tokenize" src\rewrite.rs"#,
+        r#"rtk grep -n "tokenize" src\rewrite.rs"#,
     );
     assert_deny(
         "gc src\\rewrite.rs | sls tokenize",
-        r#"rtk rg -n "tokenize" src\rewrite.rs"#,
+        r#"rtk grep -n "tokenize" src\rewrite.rs"#,
     );
     assert_no_output(
         "Get-Content src\\rewrite.rs | Select-Object -First 10 | Select-String tokenize",
@@ -284,21 +283,26 @@ fn noisy_tool_allowlist_redirects_to_rtk() {
 fn cmd_findstr_redirects_when_simple_search() {
     assert_deny(
         "findstr /N tokenize src\\rewrite.rs",
-        r#"rtk rg -n "tokenize" src\rewrite.rs"#,
+        r#"rtk grep -n "tokenize" src\rewrite.rs"#,
     );
     assert_no_output("findstr /S /N tokenize *.rs");
     assert_no_output("findstr /R /C:\"foo bar\" *.rs");
 }
 
 #[test]
-fn raw_rg_redirects_to_rtk_rg_with_quoted_patterns() {
+fn raw_rg_redirects_to_rtk_grep_with_quoted_patterns() {
     assert_deny(
         "rg -n showExtensionsMenu src tests",
-        r#"rtk rg -n "showExtensionsMenu" src tests"#,
+        r#"rtk grep -n "showExtensionsMenu" src tests"#,
     );
     assert_deny(
         "rg -n showExtensionsMenu|updateExtensionsMenu src tests",
-        r#"rtk rg -n "showExtensionsMenu|updateExtensionsMenu" src tests"#,
+        r#"rtk grep -n "showExtensionsMenu|updateExtensionsMenu" src tests"#,
     );
-    assert_deny("rg --files -g '*.rs'", "rtk rg --files -g *.rs");
+    assert_deny(
+        "rtk rg -n staleAlias src",
+        r#"rtk grep -n "staleAlias" src"#,
+    );
+    assert_deny("rg --files src", "rtk find src");
+    assert_deny("rg --files -g '*.rs'", "rtk find . -name *.rs");
 }
