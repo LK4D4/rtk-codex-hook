@@ -9,7 +9,10 @@ struct Token {
 
 pub fn suggest(command: &str) -> Option<String> {
     let command = command.trim();
-    if command.is_empty() || starts_with_rtk(command) && preferred_rtk_command(command) {
+    if command.is_empty()
+        || starts_with_rtk(command) && preferred_rtk_command(command)
+        || is_preferred_pwsh_wrapper(command)
+    {
         return None;
     }
 
@@ -89,12 +92,7 @@ fn direct_powershell_redirect(command: &str) -> Option<String> {
 }
 
 fn powershell_redirect(command: &str) -> Option<String> {
-    let had_rtk = starts_with_rtk(command);
     let without_rtk = strip_rtk_prefix(command).unwrap_or(command);
-    let preferred_pwsh = had_rtk
-        && tokenize(without_rtk)
-            .first()
-            .is_some_and(|token| command_name(&token.text) == "pwsh");
     let inner = inner_powershell_command(without_rtk)?;
 
     if contains_mutating_powershell(&inner) {
@@ -103,7 +101,7 @@ fn powershell_redirect(command: &str) -> Option<String> {
 
     pipeline_select_string_redirect(&inner)
         .or_else(|| content_redirect(&inner))
-        .or_else(|| test_tool_redirect(&inner, preferred_pwsh))
+        .or_else(|| test_tool_redirect(&inner))
         .or_else(|| select_string_redirect(&inner))
         .or_else(|| get_child_item_redirect(&inner))
 }
@@ -121,17 +119,17 @@ fn strip_rtk_prefix(command: &str) -> Option<&str> {
 }
 
 fn is_preferred_pwsh_wrapper(command: &str) -> bool {
-    let Some(without_rtk) = strip_rtk_prefix(command) else {
+    if starts_with_rtk(command) {
         return false;
-    };
-    if tokenize(without_rtk)
+    }
+    if tokenize(command)
         .first()
         .is_none_or(|token| command_name(&token.text) != "pwsh")
     {
         return false;
     }
 
-    inner_powershell_command(without_rtk).is_some_and(|inner| {
+    inner_powershell_command(command).is_some_and(|inner| {
         command_segments(&inner).iter().any(|segment| {
             let tokens = tokenize(segment);
             tokens.len() >= 2
@@ -307,11 +305,7 @@ fn select_last(command: &str) -> Option<u64> {
     number_after(&tokens[select_index + 1..], "-Last")
 }
 
-fn test_tool_redirect(inner: &str, preferred_pwsh: bool) -> Option<String> {
-    if preferred_pwsh {
-        return None;
-    }
-
+fn test_tool_redirect(inner: &str) -> Option<String> {
     for segment in command_segments(inner) {
         let tokens = tokenize(&segment);
         let Some((tool_index, tool)) = find_test_tool(&tokens) else {
@@ -326,7 +320,7 @@ fn test_tool_redirect(inner: &str, preferred_pwsh: bool) -> Option<String> {
 
         if let Some(setup) = path_setup_prefix(inner) {
             return Some(format!(
-                "rtk pwsh -NoProfile -Command {}",
+                "pwsh -NoProfile -Command {}",
                 quote_powershell_command_arg(&format!("{setup}{rtk_tool}"))
             ));
         }

@@ -77,8 +77,9 @@ The process exits `0` for both deny suggestions and no-op cases.
   and `--tail-lines`.
 - `Get-Content ... | Select-String ...` pipelines, including alias forms, become
   `rtk grep -n` searches rather than `rtk read`.
-- PowerShell wrappers around `busted` and `luacheck` become `rtk pwsh` wrappers
-  with `rtk` applied to the noisy inner tool.
+- PowerShell wrappers around `busted` and `luacheck` keep the `pwsh` wrapper
+  for environment setup while applying `rtk` to the noisy inner tool. Existing
+  unsupported `rtk pwsh ...` commands are rewritten back to `pwsh ...`.
 - Direct and wrapped PowerShell `Select-String`/`sls` becomes `rtk grep -n` for
   simple `-Path`/`-Pattern` forms, with optional `-Context N` mapped to `-C N`.
   Other switches are left alone.

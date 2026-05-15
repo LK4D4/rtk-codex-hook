@@ -166,7 +166,7 @@ fn already_good_commands_are_noops() {
     assert_no_output(r#"rtk grep -n "foo" src"#);
     assert_no_output("rtk find src");
     assert_no_output(
-        r#"rtk pwsh -NoProfile -Command '$env:PATH="$env:APPDATA\luarocks\bin;$env:PATH"; rtk busted spec'"#,
+        r#"pwsh -NoProfile -Command '$env:PATH="$env:APPDATA\luarocks\bin;$env:PATH"; rtk busted spec'"#,
     );
 }
 
@@ -244,19 +244,19 @@ fn get_content_redirects_to_rtk_read() {
 fn powershell_test_and_lint_wrappers_redirect_inner_tools() {
     assert_deny(
         r#"powershell -NoProfile -Command $env:PATH = "$env:APPDATA\luarocks\bin;$env:PATH"; busted spec"#,
-        r#"rtk pwsh -NoProfile -Command '$env:PATH = "$env:APPDATA\luarocks\bin;$env:PATH"; rtk busted spec'"#,
+        r#"pwsh -NoProfile -Command '$env:PATH = "$env:APPDATA\luarocks\bin;$env:PATH"; rtk busted spec'"#,
     );
     assert_deny(
         r#"rtk powershell -NoProfile -Command $env:PATH = "$env:APPDATA\luarocks\bin;$env:PATH"; busted spec"#,
-        r#"rtk pwsh -NoProfile -Command '$env:PATH = "$env:APPDATA\luarocks\bin;$env:PATH"; rtk busted spec'"#,
+        r#"pwsh -NoProfile -Command '$env:PATH = "$env:APPDATA\luarocks\bin;$env:PATH"; rtk busted spec'"#,
     );
     assert_deny(
         r#"powershell -NoProfile -Command $env:PATH = "$env:APPDATA\luarocks\bin;$env:PATH"; luacheck --codes spec src main.rs"#,
-        r#"rtk pwsh -NoProfile -Command '$env:PATH = "$env:APPDATA\luarocks\bin;$env:PATH"; rtk luacheck --codes spec src main.rs'"#,
+        r#"pwsh -NoProfile -Command '$env:PATH = "$env:APPDATA\luarocks\bin;$env:PATH"; rtk luacheck --codes spec src main.rs'"#,
     );
     assert_deny(
-        r#"pwsh -NoProfile -Command $env:PATH="$env:APPDATA\luarocks\bin;$env:PATH"; rtk busted spec"#,
-        r#"rtk pwsh -NoProfile -Command '$env:PATH="$env:APPDATA\luarocks\bin;$env:PATH"; rtk busted spec'"#,
+        r#"rtk pwsh -NoProfile -Command $env:PATH="$env:APPDATA\luarocks\bin;$env:PATH"; rtk busted spec"#,
+        r#"pwsh -NoProfile -Command '$env:PATH="$env:APPDATA\luarocks\bin;$env:PATH"; rtk busted spec'"#,
     );
 }
 
