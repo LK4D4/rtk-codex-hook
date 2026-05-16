@@ -18,8 +18,9 @@ pub fn suggest(command: &str) -> Option<String> {
 
     direct_powershell_redirect(command)
         .or_else(|| powershell_redirect(command))
+        .or_else(|| posix_redirect(command))
         .or_else(|| rg_redirect(command))
-        .or_else(|| rtk_rewrite(command))
+        .or_else(|| safe_external_rtk_rewrite(command))
         .or_else(|| local_rtk_miss_fallback(command))
 }
 
@@ -81,7 +82,10 @@ fn direct_powershell_redirect(command: &str) -> Option<String> {
     let tokens = tokenize(without_rtk);
     let first = tokens.first().map(|token| command_name(&token.text));
     match first.as_deref() {
-        Some("get-content" | "gc" | "cat" | "type") => {
+        Some("get-content" | "gc") => {
+            pipeline_select_string_redirect(without_rtk).or_else(|| content_redirect(without_rtk))
+        }
+        Some("cat" | "type") if has_powershell_read_option(&tokens) => {
             pipeline_select_string_redirect(without_rtk).or_else(|| content_redirect(without_rtk))
         }
         Some("select-string" | "sls") => select_string_redirect(without_rtk),
@@ -515,6 +519,122 @@ fn has_option(tokens: &[Token], name: &str) -> bool {
         .any(|token| token.text.eq_ignore_ascii_case(name))
 }
 
+fn has_powershell_read_option(tokens: &[Token]) -> bool {
+    tokens.iter().any(|token| {
+        matches!(
+            token.text.to_ascii_lowercase().as_str(),
+            "-literalpath" | "-path" | "-totalcount" | "-tail"
+        )
+    })
+}
+
+fn posix_redirect(command: &str) -> Option<String> {
+    let without_rtk = strip_rtk_prefix(command).unwrap_or(command);
+    if contains_output_redirection(without_rtk) || contains_posix_mutating_pipe(without_rtk) {
+        return None;
+    }
+
+    let tokens = tokenize(without_rtk);
+    let first = tokens.first().map(|token| command_name(&token.text));
+    match first.as_deref() {
+        Some("cat") => posix_cat_redirect(&tokens),
+        Some("head") => posix_head_tail_redirect(&tokens, "--max-lines"),
+        Some("tail") => posix_head_tail_redirect(&tokens, "--tail-lines"),
+        Some("grep") => posix_grep_redirect(&tokens),
+        Some("find") => posix_find_redirect(&tokens),
+        _ => None,
+    }
+}
+
+fn contains_posix_mutating_pipe(command: &str) -> bool {
+    command_segments(command).iter().any(|segment| {
+        let tokens = tokenize(segment);
+        tokens.windows(2).any(|window| {
+            window[0].text == "|"
+                && matches!(
+                    command_name(&window[1].text).as_str(),
+                    "tee" | "xargs" | "sh" | "bash" | "zsh"
+                )
+        })
+    })
+}
+
+fn posix_cat_redirect(tokens: &[Token]) -> Option<String> {
+    if tokens.len() != 2 || tokens[1].text.starts_with('-') {
+        return None;
+    }
+    Some(format!("rtk read {}", quote_arg(&tokens[1].text)))
+}
+
+fn posix_head_tail_redirect(tokens: &[Token], rtk_limit: &str) -> Option<String> {
+    if tokens.len() != 4 && tokens.len() != 3 {
+        return None;
+    }
+
+    let (count, path) = if tokens.len() == 4 && tokens[1].text == "-n" {
+        (tokens[2].text.parse::<u64>().ok()?, &tokens[3].text)
+    } else if tokens.len() == 3 {
+        let count = tokens[1].text.strip_prefix('-')?.parse::<u64>().ok()?;
+        (count, &tokens[2].text)
+    } else {
+        return None;
+    };
+
+    if path.starts_with('-') {
+        return None;
+    }
+    Some(format!("rtk read {} {rtk_limit} {count}", quote_arg(path)))
+}
+
+fn posix_grep_redirect(tokens: &[Token]) -> Option<String> {
+    if tokens.len() < 4 || command_name(&tokens[0].text) != "grep" {
+        return None;
+    }
+
+    let mut line_number = false;
+    let mut index = 1;
+    while index < tokens.len() && tokens[index].text.starts_with('-') {
+        match tokens[index].text.as_str() {
+            "-n" | "--line-number" => line_number = true,
+            _ => return None,
+        }
+        index += 1;
+    }
+
+    if !line_number || index + 1 >= tokens.len() {
+        return None;
+    }
+
+    let pattern = &tokens[index].text;
+    if pattern.starts_with('-') {
+        return None;
+    }
+    let paths = tokens[index + 1..]
+        .iter()
+        .map(|token| token.text.as_str())
+        .collect::<Vec<_>>();
+    if paths.iter().any(|path| path.starts_with('-')) {
+        return None;
+    }
+
+    let paths = paths
+        .into_iter()
+        .map(quote_arg)
+        .collect::<Vec<_>>()
+        .join(" ");
+    Some(format!("rtk grep -n {} {paths}", quote_pattern(pattern)))
+}
+
+fn posix_find_redirect(tokens: &[Token]) -> Option<String> {
+    if tokens.len() != 4 || command_name(&tokens[0].text) != "find" {
+        return None;
+    }
+    if tokens[2].text != "-type" || tokens[3].text != "f" || tokens[1].text.starts_with('-') {
+        return None;
+    }
+    Some(format!("rtk find {}", quote_arg(&tokens[1].text)))
+}
+
 fn findstr_redirect(command: &str) -> Option<String> {
     let tokens = tokenize(command);
     if tokens
@@ -742,6 +862,23 @@ fn rtk_rewrite(command: &str) -> Option<String> {
     } else {
         Some(rewrite)
     }
+}
+
+fn safe_external_rtk_rewrite(command: &str) -> Option<String> {
+    if blocks_external_posix_rewrite(command) {
+        return None;
+    }
+    rtk_rewrite(command)
+}
+
+fn blocks_external_posix_rewrite(command: &str) -> bool {
+    let without_rtk = strip_rtk_prefix(command).unwrap_or(command);
+    let tokens = tokenize(without_rtk);
+    let first = tokens.first().map(|token| command_name(&token.text));
+    matches!(
+        first.as_deref(),
+        Some("cat" | "head" | "tail" | "grep" | "find")
+    ) && posix_redirect(without_rtk).is_none()
 }
 
 fn positional_after_command(

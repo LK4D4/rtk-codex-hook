@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/LK4D4/rtk-windows-codex-hook/actions/workflows/ci.yml/badge.svg)](https://github.com/LK4D4/rtk-windows-codex-hook/actions/workflows/ci.yml)
 
-Windows-first Codex `PreToolUse` hook for suggesting lower-token RTK commands.
+Cross-platform Codex `PreToolUse` hook for suggesting lower-token RTK commands.
 
 The binary reads Codex hook JSON from stdin. It prints JSON only when it wants
 Codex to deny a command and show a better RTK-shaped command. Every no-op,
@@ -18,6 +18,7 @@ cargo build --release
 The binary is written to:
 
 ```text
+target/release/rtk-codex-hook
 target\release\rtk-codex-hook.exe
 ```
 
@@ -30,7 +31,22 @@ cargo clippy --all-targets --all-features -- -D warnings
 
 ## Codex Hook Setup
 
-Point your Codex `hooks.json` entry at the compiled binary. For example:
+Point your Codex `hooks.json` entry at the compiled binary. For example, on
+Unix:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "command": "/home/you/bin/rtk-codex-hook"
+      }
+    ]
+  }
+}
+```
+
+On Windows:
 
 ```json
 {
@@ -58,7 +74,7 @@ The process exits `0` for both deny suggestions and no-op cases.
 - Already preferred RTK commands are left alone, such as `rtk git status --short`.
 - Mutating PowerShell commands are left alone, including `Remove-Item`,
   `Set-Content`, `Add-Content`, `New-Item`, `Move-Item`, and `Copy-Item`.
-- Windows and PowerShell-specific reads/searches are handled locally first.
+- Windows/PowerShell and Unix shell reads/searches are handled locally first.
   Generic cross-platform tools are delegated to `rtk rewrite`, such as
   `git status --short` to `rtk git status --short` and `ls src` to
   `rtk ls src`.
@@ -75,6 +91,15 @@ The process exits `0` for both deny suggestions and no-op cases.
 - Direct and PowerShell-wrapped `Get-Content` reads, including `gc`, `cat`, and
   `type`, become `rtk read`, preserving top or tail windows with `--max-lines`
   and `--tail-lines`.
+- Unix shell reads become `rtk read` for conservative single-file forms:
+  `cat file`, `head -n N file`, `head -N file`, `tail -n N file`, and
+  `tail -N file`. Multi-file reads, redirects, and mutating pipes are left
+  alone.
+- Unix shell `grep -n pattern path...` and `grep --line-number pattern path...`
+  become `rtk grep -n`; recursive, inverted, or otherwise complex grep forms
+  are left alone.
+- Unix shell `find path -type f` becomes `rtk find path`. More complex `find`
+  predicates and mutating actions are left alone.
 - `Get-Content ... | Select-String ...` pipelines, including alias forms, become
   `rtk grep -n` searches rather than `rtk read`.
 - PowerShell wrappers around `busted` and `luacheck` keep the `pwsh` wrapper
@@ -121,7 +146,7 @@ Logging failures are ignored so the hook still fails open.
 
 ## Status
 
-This is Windows/PowerShell-first. The tokenizer is conservative and recognizes
-the command shapes Codex commonly emits on Windows. If a command is ambiguous,
-destructive, unsupported, or cannot be parsed with confidence, the hook prints
-nothing and lets Codex continue.
+This is cross-platform but intentionally conservative. The tokenizer recognizes
+the command shapes Codex commonly emits for Windows/PowerShell and Unix
+shells. If a command is ambiguous, destructive, unsupported, or cannot be parsed
+with confidence, the hook prints nothing and lets Codex continue.

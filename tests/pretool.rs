@@ -39,6 +39,26 @@ if "%~2"=="uv pip install pytest" (
   <nul set /p=rtk uv pip install pytest
   exit /b 3
 )
+if "%~2"=="cat README.md > copy.md" (
+  <nul set /p=rtk read README.md ^> copy.md
+  exit /b 3
+)
+if "%~2"=="cat README.md | tee copy.md" (
+  <nul set /p=rtk read README.md ^| tee copy.md
+  exit /b 3
+)
+if "%~2"=="grep -r tokenize src" (
+  <nul set /p=rtk grep -r tokenize src
+  exit /b 3
+)
+if "%~2"=="grep -v tokenize src\rewrite.rs" (
+  <nul set /p=rtk grep -v tokenize src\rewrite.rs
+  exit /b 3
+)
+if "%~2"=="find src -delete" (
+  <nul set /p=rtk find src -delete
+  exit /b 3
+)
 if "%~2"=="gh pr view --json title" exit /b 1
 exit /b 1
 "#,
@@ -56,6 +76,26 @@ case "$2" in
     ;;
   "uv pip install pytest")
     printf '%s' 'rtk uv pip install pytest'
+    exit 3
+    ;;
+  "cat README.md > copy.md")
+    printf '%s' 'rtk read README.md > copy.md'
+    exit 3
+    ;;
+  "cat README.md | tee copy.md")
+    printf '%s' 'rtk read README.md | tee copy.md'
+    exit 3
+    ;;
+  "grep -r tokenize src")
+    printf '%s' 'rtk grep -r tokenize src'
+    exit 3
+    ;;
+  "grep -v tokenize src/rewrite.rs")
+    printf '%s' 'rtk grep -v tokenize src/rewrite.rs'
+    exit 3
+    ;;
+  "find src -delete")
+    printf '%s' 'rtk find src -delete'
     exit 3
     ;;
   "gh pr view --json title")
@@ -373,4 +413,47 @@ fn raw_rg_redirects_to_rtk_grep_with_quoted_patterns() {
     );
     assert_deny("rg --files src", "rtk find src");
     assert_deny("rg --files -g '*.rs'", "rtk find . -name *.rs");
+}
+
+#[test]
+fn unix_shell_reads_redirect_to_rtk_read() {
+    assert_deny("cat README.md", "rtk read README.md");
+    assert_deny(
+        "head -n 40 src/main.rs",
+        "rtk read src/main.rs --max-lines 40",
+    );
+    assert_deny(
+        "head -40 src/main.rs",
+        "rtk read src/main.rs --max-lines 40",
+    );
+    assert_deny("tail -n 25 README.md", "rtk read README.md --tail-lines 25");
+    assert_deny("tail -25 README.md", "rtk read README.md --tail-lines 25");
+
+    assert_no_output("cat src/main.rs README.md");
+    assert_no_output("cat README.md > copy.md");
+    assert_no_output("cat README.md | tee copy.md");
+    assert_no_output("type rtk");
+    assert_no_output("head README.md");
+    assert_no_output("tail README.md");
+}
+
+#[test]
+fn unix_shell_search_and_find_redirects_are_conservative() {
+    assert_deny(
+        "grep -n tokenize src/rewrite.rs",
+        r#"rtk grep -n "tokenize" src/rewrite.rs"#,
+    );
+    assert_deny(
+        r#"grep -n "foo|bar" src/rewrite.rs tests/pretool.rs"#,
+        r#"rtk grep -n "foo|bar" src/rewrite.rs tests/pretool.rs"#,
+    );
+    assert_deny("find src -type f", "rtk find src");
+    assert_deny("find . -type f", "rtk find .");
+
+    assert_no_output("grep -r tokenize src");
+    assert_no_output("grep -v tokenize src/rewrite.rs");
+    assert_no_output("grep tokenize");
+    assert_no_output("find src -type d");
+    assert_no_output("find src -type f -name '*.rs'");
+    assert_no_output("find src -delete");
 }
