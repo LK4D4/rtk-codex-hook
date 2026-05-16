@@ -411,6 +411,8 @@ fn raw_rg_redirects_to_rtk_grep_with_quoted_patterns() {
         "rtk rg -n staleAlias src",
         r#"rtk grep -n "staleAlias" src"#,
     );
+    assert_no_output("rtk rg --json staleAlias src");
+    assert_no_output("rtk rg -e staleAlias -e freshAlias src");
     assert_deny("rg --files src", "rtk find src");
     assert_deny("rg --files -g '*.rs'", "rtk find . -name *.rs");
 }
@@ -428,6 +430,16 @@ fn unix_shell_reads_redirect_to_rtk_read() {
     );
     assert_deny("tail -n 25 README.md", "rtk read README.md --tail-lines 25");
     assert_deny("tail -25 README.md", "rtk read README.md --tail-lines 25");
+    assert_deny(
+        "sed -n '1,120p' src/rewrite.rs",
+        "rtk read src/rewrite.rs --max-lines 120",
+    );
+    assert_deny(
+        "rtk sed -n 1,80p README.md",
+        "rtk read README.md --max-lines 80",
+    );
+    assert_deny("nl -ba src/rewrite.rs", "rtk read -n src/rewrite.rs");
+    assert_deny("rtk nl -ba README.md", "rtk read -n README.md");
 
     assert_no_output("cat src/main.rs README.md");
     assert_no_output("cat README.md > copy.md");
@@ -435,6 +447,10 @@ fn unix_shell_reads_redirect_to_rtk_read() {
     assert_no_output("type rtk");
     assert_no_output("head README.md");
     assert_no_output("tail README.md");
+    assert_no_output("sed -n '100,160p' src/rewrite.rs");
+    assert_no_output("sed -i '1,10d' src/rewrite.rs");
+    assert_no_output("nl src/rewrite.rs");
+    assert_no_output("nl -ba src/rewrite.rs README.md");
 }
 
 #[test]

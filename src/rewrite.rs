@@ -540,6 +540,8 @@ fn posix_redirect(command: &str) -> Option<String> {
         Some("cat") => posix_cat_redirect(&tokens),
         Some("head") => posix_head_tail_redirect(&tokens, "--max-lines"),
         Some("tail") => posix_head_tail_redirect(&tokens, "--tail-lines"),
+        Some("sed") => posix_sed_redirect(&tokens),
+        Some("nl") => posix_nl_redirect(&tokens),
         Some("grep") => posix_grep_redirect(&tokens),
         Some("find") => posix_find_redirect(&tokens),
         _ => None,
@@ -584,6 +586,39 @@ fn posix_head_tail_redirect(tokens: &[Token], rtk_limit: &str) -> Option<String>
         return None;
     }
     Some(format!("rtk read {} {rtk_limit} {count}", quote_arg(path)))
+}
+
+fn posix_sed_redirect(tokens: &[Token]) -> Option<String> {
+    if tokens.len() != 4 || command_name(&tokens[0].text) != "sed" || tokens[1].text != "-n" {
+        return None;
+    }
+
+    let line_count = tokens[2]
+        .text
+        .strip_prefix("1,")?
+        .strip_suffix('p')?
+        .parse::<u64>()
+        .ok()?;
+    let path = &tokens[3].text;
+    if path.starts_with('-') {
+        return None;
+    }
+    Some(format!(
+        "rtk read {} --max-lines {line_count}",
+        quote_arg(path)
+    ))
+}
+
+fn posix_nl_redirect(tokens: &[Token]) -> Option<String> {
+    if tokens.len() != 3 || command_name(&tokens[0].text) != "nl" || tokens[1].text != "-ba" {
+        return None;
+    }
+
+    let path = &tokens[2].text;
+    if path.starts_with('-') {
+        return None;
+    }
+    Some(format!("rtk read -n {}", quote_arg(path)))
 }
 
 fn posix_grep_redirect(tokens: &[Token]) -> Option<String> {
@@ -684,6 +719,14 @@ fn rg_redirect(command: &str) -> Option<String> {
         .map(|token| token.text.clone())
         .collect::<Vec<_>>();
     if args.is_empty() {
+        return None;
+    }
+    if args.iter().any(|arg| {
+        matches!(
+            arg.as_str(),
+            "--json" | "-e" | "--regexp" | "-f" | "--file" | "--replace" | "-r"
+        )
+    }) {
         return None;
     }
     if args.iter().any(|arg| arg == "--files") {

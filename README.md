@@ -162,8 +162,10 @@ The process exits `0` for both deny suggestions and no-op cases.
   and `--tail-lines`.
 - Unix shell reads become `rtk read` for conservative single-file forms:
   `cat file`, `head -n N file`, `head -N file`, `tail -n N file`, and
-  `tail -N file`. Multi-file reads, redirects, and mutating pipes are left
-  alone.
+  `tail -N file`. Simple top-of-file `sed -n '1,Np' file` reads become
+  `rtk read --max-lines N`, and `nl -ba file` becomes `rtk read -n file`.
+  Multi-file reads, redirects, mutating `sed` forms, and non-top line ranges
+  are left alone.
 - Unix shell `grep -n pattern path...` and `grep --line-number pattern path...`
   become `rtk grep -n`; recursive, inverted, or otherwise complex grep forms
   are left alone.
@@ -185,7 +187,8 @@ The process exits `0` for both deny suggestions and no-op cases.
   recursive `/S` searches and other complex `findstr` modes are left alone.
 - Raw `rg` content searches become `rtk grep`, and `rg --files` file discovery
   becomes `rtk find`. These stay local because the hook quotes PowerShell-
-  sensitive patterns and maps file discovery to `rtk find`.
+  sensitive patterns and maps file discovery to `rtk find`. Unsupported `rg`
+  modes such as JSON output or multiple explicit `-e` patterns are left alone.
 
 The rewrite rules are intentionally generic. There is no repo-specific or
 language-specific policy in this hook; smarter language-aware behavior can be
