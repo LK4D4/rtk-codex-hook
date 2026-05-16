@@ -25,9 +25,8 @@ macOS or Linux:
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/LK4D4/rtk-codex-hook/releases/latest/download/rtk-codex-hook-installer.sh | sh
 ```
 
-The installer downloads the prebuilt binary for your platform, installs it to
-`${CARGO_HOME:-~/.cargo}/bin` on macOS/Linux or `%CARGO_HOME%\bin`/`%USERPROFILE%\.cargo\bin`
-on Windows, and updates `hooks.json` using:
+The installer downloads the prebuilt binary for your platform and updates
+`hooks.json` using:
 
 ```powershell
 rtk-codex-hook --install-codex-hook
@@ -35,6 +34,19 @@ rtk-codex-hook --install-codex-hook
 
 Set `RTK_CODEX_HOOK_INSTALL_DIR` to choose another binary directory. Set
 `CODEX_HOME` to choose another Codex config directory instead of `~/.codex`.
+Set `RTK_CODEX_HOOK_NO_PATH_UPDATE=1` to skip shell PATH changes.
+
+Default install locations:
+
+- macOS/Linux: first existing local bin directory already on `PATH` from
+  `~/.local/bin` or `~/bin`, otherwise `~/.local/bin`
+- Windows: `%LOCALAPPDATA%\rtk-codex-hook\bin`
+
+When the install directory is not already on `PATH`, the Unix installer adds an
+idempotent managed block to `~/.zshrc`, `~/.bashrc`, or `~/.profile` and writes a
+`.bak` before editing an existing file. The Windows installer appends the install
+directory to the User `Path` environment variable. Codex uses the absolute binary
+path in `hooks.json`, so the hook works even before you restart your terminal.
 
 ## Manual Install
 
