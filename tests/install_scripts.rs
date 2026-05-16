@@ -117,3 +117,36 @@ mod unix {
         );
     }
 }
+
+#[test]
+fn powershell_installer_parses_when_pwsh_is_available() {
+    let pwsh = if cfg!(windows) {
+        "pwsh".to_string()
+    } else if std::path::Path::new("/mnt/c/Program Files/PowerShell/7/pwsh.exe").exists() {
+        "/mnt/c/Program Files/PowerShell/7/pwsh.exe".to_string()
+    } else if std::path::Path::new("/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/powershell.exe")
+        .exists()
+    {
+        "/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/powershell.exe".to_string()
+    } else {
+        eprintln!("skipping PowerShell parser test: pwsh.exe not found");
+        return;
+    };
+
+    let output = std::process::Command::new(pwsh)
+        .arg("-NoProfile")
+        .arg("-Command")
+        .arg(
+            "$tokens=$null; $errors=$null; \
+             [System.Management.Automation.Language.Parser]::ParseFile('scripts/install.ps1',[ref]$tokens,[ref]$errors) > $null; \
+             if ($errors.Count) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }",
+        )
+        .output()
+        .expect("run PowerShell parser");
+    assert!(
+        output.status.success(),
+        "PowerShell installer should parse\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
