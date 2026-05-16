@@ -9,7 +9,53 @@ Codex to deny a command and show a better RTK-shaped command. Every no-op,
 unsupported command, malformed payload, and internal error exits `0` with no
 output so the hook fails open.
 
-## Build
+## Install
+
+Install from the latest GitHub release. No Rust toolchain is required.
+
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/LK4D4/rtk-codex-hook/releases/latest/download/rtk-codex-hook-installer.ps1 | iex"
+```
+
+macOS or Linux:
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/LK4D4/rtk-codex-hook/releases/latest/download/rtk-codex-hook-installer.sh | sh
+```
+
+The installer downloads the prebuilt binary for your platform, installs it to
+`${CARGO_HOME:-~/.cargo}/bin` on macOS/Linux or `%CARGO_HOME%\bin`/`%USERPROFILE%\.cargo\bin`
+on Windows, and updates `hooks.json` using:
+
+```powershell
+rtk-codex-hook --install-codex-hook
+```
+
+Set `RTK_CODEX_HOOK_INSTALL_DIR` to choose another binary directory. Set
+`CODEX_HOME` to choose another Codex config directory instead of `~/.codex`.
+
+## Manual Install
+
+Download the archive for your platform from the latest release:
+
+- `rtk-codex-hook-x86_64-pc-windows-msvc.zip`
+- `rtk-codex-hook-x86_64-unknown-linux-musl.tar.gz`
+- `rtk-codex-hook-x86_64-apple-darwin.tar.gz`
+- `rtk-codex-hook-aarch64-apple-darwin.tar.gz`
+
+Extract the binary into a directory on your `PATH`, then run:
+
+```powershell
+rtk-codex-hook --install-codex-hook
+```
+
+The install command creates `hooks.json` if needed, preserves existing hooks,
+adds the `PreToolUse` entry once, and writes `hooks.json.bak` before changing an
+existing file.
+
+## Build From Source
 
 ```powershell
 cargo build --release
@@ -29,10 +75,21 @@ cargo test
 cargo clippy --all-targets --all-features -- -D warnings
 ```
 
+## Release
+
+Release artifacts are built by `.github/workflows/release.yml` when a tag like
+`v0.1.0` is pushed. The workflow publishes platform archives, installer scripts,
+and `SHA256SUMS` to the GitHub release.
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## Codex Hook Setup
 
-Point your Codex `hooks.json` entry at the compiled binary. For example, on
-Unix:
+The installer manages this automatically. If you want to edit `hooks.json`
+yourself, point the `PreToolUse` entry at the binary. For example, on Unix:
 
 ```json
 {

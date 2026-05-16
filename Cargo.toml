@@ -2,7 +2,21 @@
 name = "rtk-codex-hook"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
+description = "Codex PreToolUse hook that suggests lower-token RTK commands"
+repository = "https://github.com/LK4D4/rtk-codex-hook"
+homepage = "https://github.com/LK4D4/rtk-codex-hook"
+readme = "README.md"
+license = "MIT"
+keywords = ["codex", "hook", "rtk", "cli"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+[profile.dist]
+inherits = "release"
+lto = "thin"
+codegen-units = 1
+strip = true
