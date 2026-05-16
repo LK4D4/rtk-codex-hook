@@ -1,6 +1,6 @@
 # rtk-codex-hook
 
-[![CI](https://github.com/LK4D4/rtk-windows-codex-hook/actions/workflows/ci.yml/badge.svg)](https://github.com/LK4D4/rtk-windows-codex-hook/actions/workflows/ci.yml)
+[![CI](https://github.com/LK4D4/rtk-codex-hook/actions/workflows/ci.yml/badge.svg)](https://github.com/LK4D4/rtk-codex-hook/actions/workflows/ci.yml)
 
 Cross-platform Codex `PreToolUse` hook for suggesting lower-token RTK commands.
 
