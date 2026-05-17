@@ -27,5 +27,7 @@ Agent-facing install steps live in [`CODEX_INSTALL.md`](CODEX_INSTALL.md).
 it can suggest a safer RTK-shaped command. Ambiguous, unsupported, malformed, or
 mutating commands fail open with no output.
 
+Repo-tested Codex usage guidance lives in [`RTK.md`](RTK.md).
+
 Developer docs, release steps, debugging, and full rewrite details live in
 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).

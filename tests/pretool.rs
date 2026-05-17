@@ -301,6 +301,36 @@ fn powershell_test_and_lint_wrappers_redirect_inner_tools() {
 }
 
 #[test]
+fn unix_shell_wrappers_redirect_inner_test_tools() {
+    assert_deny(
+        r#"bash -lc 'PATH="$HOME/.luarocks/bin:$PATH" busted spec'"#,
+        r#"bash -lc 'PATH="$HOME/.luarocks/bin:$PATH" rtk busted spec'"#,
+    );
+    assert_deny(
+        r#"bash -c 'PATH="$HOME/.luarocks/bin:$PATH" luacheck --codes spec suwayomi main.lua _meta.lua'"#,
+        r#"bash -c 'PATH="$HOME/.luarocks/bin:$PATH" rtk luacheck --codes spec suwayomi main.lua _meta.lua'"#,
+    );
+    assert_deny(
+        r#"rtk bash -lc 'PATH="$HOME/.luarocks/bin:$PATH" rtk busted spec'"#,
+        r#"bash -lc 'PATH="$HOME/.luarocks/bin:$PATH" rtk busted spec'"#,
+    );
+    assert_no_output(r#"bash -lc 'PATH="$HOME/.luarocks/bin:$PATH" rtk busted spec'"#);
+    assert_no_output(r#"bash -lc 'echo hi | busted spec'"#);
+    assert_no_output(r#"bash -n .codex/hooks/rtk-codex-pretool.sh"#);
+
+    assert_deny(
+        r#"env PATH=/home/lk4d4/.luarocks/bin:$PATH busted spec"#,
+        r#"env PATH=/home/lk4d4/.luarocks/bin:$PATH rtk busted spec"#,
+    );
+    assert_deny(
+        r#"rtk env PATH=/home/lk4d4/.luarocks/bin:$PATH rtk luacheck --codes spec"#,
+        r#"env PATH=/home/lk4d4/.luarocks/bin:$PATH rtk luacheck --codes spec"#,
+    );
+    assert_no_output(r#"env PATH=/home/lk4d4/.luarocks/bin:$PATH rtk busted spec"#);
+    assert_no_output(r#"env PATH=/home/lk4d4/.luarocks/bin:$PATH node --check hook.js"#);
+}
+
+#[test]
 fn select_string_redirects_to_rtk_grep() {
     assert_deny(
         r#"Select-String -Path 'src\main.rs' -Pattern 'foo' -Context 2"#,

@@ -12,12 +12,15 @@ pub fn suggest(command: &str) -> Option<String> {
     if command.is_empty()
         || starts_with_rtk(command) && preferred_rtk_command(command)
         || is_preferred_pwsh_wrapper(command)
+        || is_preferred_bash_wrapper(command)
     {
         return None;
     }
 
     direct_powershell_redirect(command)
         .or_else(|| powershell_redirect(command))
+        .or_else(|| env_redirect(command))
+        .or_else(|| bash_redirect(command))
         .or_else(|| posix_redirect(command))
         .or_else(|| rg_redirect(command))
         .or_else(|| safe_external_rtk_rewrite(command))
@@ -56,6 +59,7 @@ fn preferred_rtk_command(command: &str) -> bool {
                 | "curl"
         )
     ) || is_preferred_pwsh_wrapper(command)
+        || is_preferred_bash_wrapper(command)
 }
 
 fn starts_with_rtk(command: &str) -> bool {
@@ -146,6 +150,23 @@ fn is_preferred_pwsh_wrapper(command: &str) -> bool {
     })
 }
 
+fn is_preferred_bash_wrapper(command: &str) -> bool {
+    if starts_with_rtk(command) {
+        return false;
+    }
+    if tokenize(command)
+        .first()
+        .is_none_or(|token| command_name(&token.text) != "bash")
+    {
+        return false;
+    }
+
+    inner_bash_command(command).is_some_and(|(_, inner)| {
+        let tokens = tokenize(&inner);
+        find_test_tool_invocation(&tokens).is_some_and(|(_, _, _, already_rtk)| already_rtk)
+    })
+}
+
 fn inner_powershell_command(command: &str) -> Option<String> {
     let tokens = tokenize(command);
     if !tokens
@@ -165,6 +186,25 @@ fn inner_powershell_command(command: &str) -> Option<String> {
         inner = inner[3..inner.len() - 1].trim().to_string();
     }
     Some(inner)
+}
+
+fn inner_bash_command(command: &str) -> Option<(String, String)> {
+    let tokens = tokenize(command);
+    if tokens
+        .first()
+        .is_none_or(|token| command_name(&token.text) != "bash")
+    {
+        return None;
+    }
+
+    let command_token = tokens.iter().position(|token| {
+        matches!(token.text.as_str(), "-c" | "-lc" | "-cl")
+            || token.text.starts_with('-') && token.text.contains('c') && !token.text.contains('n')
+    })?;
+    let option = tokens[command_token].text.clone();
+    let start = tokens.get(command_token + 1)?.start;
+    let inner = strip_outer_quotes(command[start..].trim()).to_string();
+    Some((option, inner))
 }
 
 fn strip_outer_quotes(value: &str) -> &str {
@@ -207,6 +247,117 @@ fn contains_output_redirection(command: &str) -> bool {
         }
     }
     false
+}
+
+fn env_redirect(command: &str) -> Option<String> {
+    let had_rtk_prefix = strip_rtk_prefix(command).is_some();
+    let without_rtk = strip_rtk_prefix(command).unwrap_or(command);
+    let tokens = tokenize(without_rtk);
+    if tokens
+        .first()
+        .is_none_or(|token| command_name(&token.text) != "env")
+    {
+        return None;
+    }
+
+    let mut index = 1;
+    while tokens
+        .get(index)
+        .is_some_and(|token| is_env_assignment(&token.text))
+    {
+        index += 1;
+    }
+    if index == 1 || index >= tokens.len() {
+        return None;
+    }
+
+    let (command_index, tool_index, tool, already_rtk) = find_test_tool_invocation(
+        &tokens[index..],
+    )
+    .map(|(command_index, tool_index, tool, already_rtk)| {
+        (command_index + index, tool_index + index, tool, already_rtk)
+    })?;
+    if command_index != index || already_rtk && !had_rtk_prefix {
+        return None;
+    }
+    if tokens[tool_index + 1..]
+        .iter()
+        .any(|token| matches!(token.text.as_str(), "|" | ";"))
+    {
+        return None;
+    }
+
+    let assignments = tokens[1..index]
+        .iter()
+        .map(|token| token.text.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let args = join_args(&tokens[tool_index + 1..]);
+    Some(format!("env {assignments} rtk {tool}{args}"))
+}
+
+fn bash_redirect(command: &str) -> Option<String> {
+    let had_rtk_prefix = strip_rtk_prefix(command).is_some();
+    let without_rtk = strip_rtk_prefix(command).unwrap_or(command);
+    let (option, inner) = inner_bash_command(without_rtk)?;
+    let rewritten = shell_inner_test_tool_redirect(&inner)?;
+    if rewritten == inner && !had_rtk_prefix {
+        return None;
+    }
+    Some(format!(
+        "bash {option} {}",
+        quote_bash_command_arg(&rewritten)
+    ))
+}
+
+fn shell_inner_test_tool_redirect(inner: &str) -> Option<String> {
+    if shell_inner_has_unsupported_control(inner) {
+        return None;
+    }
+    let tokens = tokenize(inner);
+    let (command_index, tool_index, tool, already_rtk) = find_test_tool_invocation(&tokens)?;
+    if tokens[..command_index]
+        .iter()
+        .any(|token| !is_env_assignment(&token.text))
+    {
+        return None;
+    }
+
+    let prefix = inner[..tokens[command_index].start].trim_end();
+    let args = join_args(&tokens[tool_index + 1..]);
+    let mut rewritten = String::new();
+    if !prefix.is_empty() {
+        rewritten.push_str(prefix);
+        rewritten.push(' ');
+    }
+    rewritten.push_str("rtk ");
+    rewritten.push_str(&tool);
+    rewritten.push_str(&args);
+    if already_rtk && rewritten == inner {
+        return Some(inner.to_string());
+    }
+    Some(rewritten)
+}
+
+fn shell_inner_has_unsupported_control(inner: &str) -> bool {
+    inner.contains('\n')
+        || inner.contains('|')
+        || inner.contains("&&")
+        || inner.contains("||")
+        || inner.contains('<')
+        || inner.contains('>')
+        || inner.contains(';')
+}
+
+fn is_env_assignment(value: &str) -> bool {
+    let Some((name, _)) = value.split_once('=') else {
+        return false;
+    };
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+        && !name.as_bytes()[0].is_ascii_digit()
 }
 
 fn content_redirect(command: &str) -> Option<String> {
@@ -334,17 +485,22 @@ fn test_tool_redirect(inner: &str) -> Option<String> {
 }
 
 fn find_test_tool(tokens: &[Token]) -> Option<(usize, String)> {
+    let (_, tool_index, tool, _) = find_test_tool_invocation(tokens)?;
+    Some((tool_index, tool))
+}
+
+fn find_test_tool_invocation(tokens: &[Token]) -> Option<(usize, usize, String, bool)> {
     for (index, token) in tokens.iter().enumerate() {
         let name = command_name(&token.text);
         if matches!(name.as_str(), "busted" | "luacheck") {
-            return Some((index, name));
+            return Some((index, index, name, false));
         }
         if name == "rtk"
             && let Some(next) = tokens.get(index + 1)
         {
             let next_name = command_name(&next.text);
             if matches!(next_name.as_str(), "busted" | "luacheck") {
-                return Some((index + 1, next_name));
+                return Some((index, index + 1, next_name, true));
             }
         }
     }
@@ -1100,6 +1256,10 @@ fn quote_pattern(value: &str) -> String {
 
 fn quote_powershell_command_arg(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
+}
+
+fn quote_bash_command_arg(value: &str) -> String {
+    format!("'{}'", value.replace('\'', r#"'\''"#))
 }
 
 #[cfg(test)]

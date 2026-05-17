@@ -120,6 +120,10 @@ Rewrite order:
 - PowerShell wrappers around `busted` and `luacheck` keep the `pwsh` wrapper
   for environment setup while applying `rtk` to the noisy inner tool. Existing
   unsupported `rtk pwsh ...` commands are rewritten back to `pwsh ...`.
+- Unix `bash -c`/`bash -lc` and `env VAR=...` wrappers around `busted` and
+  `luacheck` keep the wrapper or environment setup raw while applying `rtk` to
+  the noisy inner tool. Complex shell control flow, pipes, redirects, and syntax
+  checks such as `bash -n` are left alone.
 - Direct and wrapped PowerShell `Select-String`/`sls` becomes `rtk grep -n` for
   simple `-Path`/`-Pattern` forms, with optional `-Context N` mapped to `-C N`.
   Other switches are left alone.
