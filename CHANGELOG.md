@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-- Add release packaging, installer scripts, and Codex hook auto-install support.
-- Install binaries outside Cargo-managed directories by default and update user
-  PATH when needed.
+- Rework installation around Codex-managed setup: publish release archives, move
+  detailed install/development guidance out of the README, remove installer
+  scripts and binary-managed hook registration, and leave hook trust as an
+  explicit user action.

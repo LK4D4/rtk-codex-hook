@@ -63,7 +63,6 @@ jobs:
           set -euo pipefail
           mkdir -p dist/pkg
           cp "target/${{ matrix.target }}/dist/${{ matrix.binary }}" dist/pkg/
-          cp README.md LICENSE CHANGELOG.md dist/pkg/
           tar -czf "dist/${{ matrix.asset }}" -C dist/pkg .
 
       - name: Package Windows archive
@@ -72,7 +71,6 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist/pkg | Out-Null
           Copy-Item "target/${{ matrix.target }}/dist/${{ matrix.binary }}" dist/pkg/
-          Copy-Item README.md, LICENSE, CHANGELOG.md dist/pkg/
           Compress-Archive -Path dist/pkg/* -DestinationPath "dist/${{ matrix.asset }}" -Force
 
       - name: Upload archive
@@ -82,32 +80,11 @@ jobs:
           path: dist/${{ matrix.asset }}
           if-no-files-found: error
 
-  installers:
-    name: Package installers
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Stage installers
-        run: |
-          mkdir -p dist
-          cp scripts/install.sh dist/rtk-codex-hook-installer.sh
-          cp scripts/install.ps1 dist/rtk-codex-hook-installer.ps1
-
-      - name: Upload installers
-        uses: actions/upload-artifact@v4
-        with:
-          name: installers
-          path: dist/*
-          if-no-files-found: error
-
   checksums:
     name: Generate checksums
     runs-on: ubuntu-latest
     needs:
       - build
-      - installers
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -130,7 +107,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
-      - installers
       - checksums
     steps:
       - name: Download artifacts

@@ -10,7 +10,8 @@ This repo is a small Rust CLI for Codex `PreToolUse` hooks on Windows.
 - `src/hook.rs`: Codex hook JSON parsing, fail-open behavior, and deny JSON output.
 - `src/rewrite.rs`: conservative command tokenization and RTK rewrite suggestions.
 - `tests/pretool.rs`: integration fixture that feeds Codex-style JSON to the binary.
-- `README.md`: user-facing build, install, behavior, and debugging docs.
+- `README.md`: user-facing overview and install prompt.
+- `docs/DEVELOPMENT.md`: build, release, behavior, and debugging docs.
 
 ## Non-Negotiable Behavior
 
@@ -36,6 +37,8 @@ This repo is a small Rust CLI for Codex `PreToolUse` hooks on Windows.
 
 - Do not work directly on `main` unless the user explicitly asks. Use a branch
   or a linked worktree for changes.
+- For install requests, point Codex at `CODEX_INSTALL.md`; humans should only
+  need the short prompt in `README.md`.
 - Keep edits small and tied to observable hook behavior.
 - Prefer deterministic in-process rewrite tests. If using the external
   `rtk rewrite` path, keep it as a separate integration concern so tests do not
@@ -43,7 +46,7 @@ This repo is a small Rust CLI for Codex `PreToolUse` hooks on Windows.
 - Add or update `tests/pretool.rs` for every behavior change. Test both:
   - the command that should produce a deny suggestion
   - nearby commands that should fail open with no output
-- Keep README behavior descriptions in sync with tested behavior.
+- Keep `docs/DEVELOPMENT.md` behavior descriptions in sync with tested behavior.
 - Commit completed work; do not leave intended repo changes unstaged or
   uncommitted.
 
