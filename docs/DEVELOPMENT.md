@@ -85,6 +85,9 @@ Rewrite order:
 ## What It Rewrites
 
 - Already preferred RTK commands are left alone, such as `rtk git status --short`.
+  Invalid `rtk read` forms with invented flags such as `--line`, `--lines`, or
+  `--range` are denied with `rtk read --help` so agents do not confuse RTK parse
+  fallback errors with a missing `rtk read` command.
 - Mutating PowerShell commands are left alone, including `Remove-Item`,
   `Set-Content`, `Add-Content`, `New-Item`, `Move-Item`, and `Copy-Item`.
 - Windows/PowerShell and Unix shell reads/searches are handled locally first.

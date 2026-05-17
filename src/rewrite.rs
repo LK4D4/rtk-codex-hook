@@ -9,22 +9,46 @@ struct Token {
 
 pub fn suggest(command: &str) -> Option<String> {
     let command = command.trim();
-    if command.is_empty()
-        || starts_with_rtk(command) && preferred_rtk_command(command)
-        || is_preferred_pwsh_wrapper(command)
-        || is_preferred_bash_wrapper(command)
+    if command.is_empty() {
+        return None;
+    }
+
+    invalid_rtk_read_redirect(command).or_else(|| {
+        if starts_with_rtk(command) && preferred_rtk_command(command)
+            || is_preferred_pwsh_wrapper(command)
+            || is_preferred_bash_wrapper(command)
+        {
+            return None;
+        }
+
+        direct_powershell_redirect(command)
+            .or_else(|| powershell_redirect(command))
+            .or_else(|| env_redirect(command))
+            .or_else(|| bash_redirect(command))
+            .or_else(|| posix_redirect(command))
+            .or_else(|| rg_redirect(command))
+            .or_else(|| safe_external_rtk_rewrite(command))
+            .or_else(|| local_rtk_miss_fallback(command))
+    })
+}
+
+fn invalid_rtk_read_redirect(command: &str) -> Option<String> {
+    let tokens = tokenize(command);
+    if command_name(&tokens.first()?.text) != "rtk" || command_name(&tokens.get(1)?.text) != "read"
     {
         return None;
     }
 
-    direct_powershell_redirect(command)
-        .or_else(|| powershell_redirect(command))
-        .or_else(|| env_redirect(command))
-        .or_else(|| bash_redirect(command))
-        .or_else(|| posix_redirect(command))
-        .or_else(|| rg_redirect(command))
-        .or_else(|| safe_external_rtk_rewrite(command))
-        .or_else(|| local_rtk_miss_fallback(command))
+    tokens
+        .iter()
+        .skip(2)
+        .any(|token| {
+            matches!(token.text.as_str(), "--line" | "--lines" | "--range")
+                || token.text.starts_with("--line=")
+                || token.text.starts_with("--lines=")
+                || token.text.starts_with("--range=")
+        })
+        .then(|| "rtk read --help".to_string())
 }
 
 fn preferred_rtk_command(command: &str) -> bool {

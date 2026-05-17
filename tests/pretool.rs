@@ -205,9 +205,22 @@ fn already_good_commands_are_noops() {
     assert_no_output("rtk git status --short");
     assert_no_output(r#"rtk grep -n "foo" src"#);
     assert_no_output("rtk find src");
+    assert_no_output("rtk read src/main.rs --max-lines 120");
+    assert_no_output("rtk read -n src/main.rs --tail-lines 40");
     assert_no_output(
         r#"pwsh -NoProfile -Command '$env:PATH="$env:APPDATA\luarocks\bin;$env:PATH"; rtk busted spec'"#,
     );
+}
+
+#[test]
+fn invalid_rtk_read_flags_suggest_help() {
+    for command in [
+        "rtk read suwayomi/client/source_manga.lua --line 1 --lines 650",
+        "rtk read suwayomi/ui.lua --line 1-120",
+        "rtk read suwayomi/ui.lua --range 130:310",
+    ] {
+        assert_deny(command, "rtk read --help");
+    }
 }
 
 #[test]
