@@ -94,9 +94,10 @@ Rewrite order:
 ## What It Rewrites
 
 - Already preferred RTK commands are left alone, such as `rtk git status --short`.
-  Invalid `rtk read` forms with invented flags such as `--line`, `--lines`, or
-  `--range` are denied with `rtk read --help` so agents do not confuse RTK parse
-  fallback errors with a missing `rtk read` command.
+  Invalid `rtk read` forms with invented window flags such as `--line`,
+  `--lines`, `--range`, or `--start-line` are denied with `rtk read --help` so
+  agents do not confuse RTK parse fallback errors with a missing `rtk read`
+  command.
 - Mutating PowerShell commands are left alone, including `Remove-Item`,
   `Set-Content`, `Add-Content`, `New-Item`, `Move-Item`, and `Copy-Item`.
 - Windows/PowerShell and Unix shell reads/searches are handled locally first.
@@ -120,8 +121,8 @@ Rewrite order:
   `cat file`, `head -n N file`, `head -N file`, `tail -n N file`, and
   `tail -N file`. Simple top-of-file `sed -n '1,Np' file` reads become
   `rtk read --max-lines N`, and `nl -ba file` becomes `rtk read -n file`.
-  Multi-file reads, redirects, mutating `sed` forms, and non-top line ranges
-  are left alone.
+  Multi-file reads, redirects, mutating `sed` forms, and non-top line ranges are
+  left alone because `rtk read` has no start-line option.
 - Unix shell `grep -n pattern path...` and `grep --line-number pattern path...`
   become `rtk grep -n`; recursive, inverted, or otherwise complex grep forms
   are left alone.

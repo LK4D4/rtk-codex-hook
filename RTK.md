@@ -37,7 +37,8 @@ rtk read app.log --tail-lines 80
 
 Valid flags: `--line-numbers`/`-n`, `--max-lines`, `--tail-lines`,
 `--level none|minimal|aggressive`. Do not invent `--range`, `--line`, or
-`--lines`.
+`--lines`. `rtk read` has no `--start-line` option; for middle-of-file windows
+use raw `sed -n '130,190p' path` instead of `rtk read --start-line ...`.
 
 ## Read Levels
 
@@ -58,7 +59,8 @@ Use `minimal` for compact first reads of medium/large files when comments and
 blank lines matter less than code shape.
 
 Use `aggressive` for structure scans of large unfamiliar files. Then follow
-with targeted `rtk grep` or exact `rtk read` windows.
+with targeted `rtk grep`, bounded top/tail `rtk read`, or raw `sed -n` for
+middle-of-file windows.
 
 Use `rtk smart <file>` for quick heuristic source summaries. Do not rely on it
 for exact code when editing or reviewing line-level behavior.

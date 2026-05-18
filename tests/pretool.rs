@@ -215,9 +215,11 @@ fn already_good_commands_are_noops() {
 #[test]
 fn invalid_rtk_read_flags_suggest_help() {
     for command in [
-        "rtk read suwayomi/client/source_manga.lua --line 1 --lines 650",
-        "rtk read suwayomi/ui.lua --line 1-120",
-        "rtk read suwayomi/ui.lua --range 130:310",
+        "rtk read src/client/source.lua --line 1 --lines 650",
+        "rtk read src/ui.lua --line 1-120",
+        "rtk read src/ui.lua --range 130:310",
+        "rtk read docs/notes.md --start-line 130 --max-lines 60",
+        "rtk read docs/notes.md --start-line=130 --max-lines 60",
     ] {
         assert_deny(command, "rtk read --help");
     }
@@ -320,8 +322,8 @@ fn unix_shell_wrappers_redirect_inner_test_tools() {
         r#"bash -lc 'PATH="$HOME/.luarocks/bin:$PATH" rtk busted spec'"#,
     );
     assert_deny(
-        r#"bash -c 'PATH="$HOME/.luarocks/bin:$PATH" luacheck --codes spec suwayomi main.lua _meta.lua'"#,
-        r#"bash -c 'PATH="$HOME/.luarocks/bin:$PATH" rtk luacheck --codes spec suwayomi main.lua _meta.lua'"#,
+        r#"bash -c 'PATH="$HOME/.luarocks/bin:$PATH" luacheck --codes spec src main.lua _meta.lua'"#,
+        r#"bash -c 'PATH="$HOME/.luarocks/bin:$PATH" rtk luacheck --codes spec src main.lua _meta.lua'"#,
     );
     assert_deny(
         r#"rtk bash -lc 'PATH="$HOME/.luarocks/bin:$PATH" rtk busted spec'"#,
@@ -332,15 +334,15 @@ fn unix_shell_wrappers_redirect_inner_test_tools() {
     assert_no_output(r#"bash -n .codex/hooks/rtk-codex-pretool.sh"#);
 
     assert_deny(
-        r#"env PATH=/home/lk4d4/.luarocks/bin:$PATH busted spec"#,
-        r#"env PATH=/home/lk4d4/.luarocks/bin:$PATH rtk busted spec"#,
+        r#"env PATH=$HOME/.luarocks/bin:$PATH busted spec"#,
+        r#"env PATH=$HOME/.luarocks/bin:$PATH rtk busted spec"#,
     );
     assert_deny(
-        r#"rtk env PATH=/home/lk4d4/.luarocks/bin:$PATH rtk luacheck --codes spec"#,
-        r#"env PATH=/home/lk4d4/.luarocks/bin:$PATH rtk luacheck --codes spec"#,
+        r#"rtk env PATH=$HOME/.luarocks/bin:$PATH rtk luacheck --codes spec"#,
+        r#"env PATH=$HOME/.luarocks/bin:$PATH rtk luacheck --codes spec"#,
     );
-    assert_no_output(r#"env PATH=/home/lk4d4/.luarocks/bin:$PATH rtk busted spec"#);
-    assert_no_output(r#"env PATH=/home/lk4d4/.luarocks/bin:$PATH node --check hook.js"#);
+    assert_no_output(r#"env PATH=$HOME/.luarocks/bin:$PATH rtk busted spec"#);
+    assert_no_output(r#"env PATH=$HOME/.luarocks/bin:$PATH node --check hook.js"#);
 }
 
 #[test]

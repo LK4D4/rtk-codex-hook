@@ -47,6 +47,8 @@ fn invalid_rtk_read_redirect(command: &str) -> Option<String> {
                 || token.text.starts_with("--line=")
                 || token.text.starts_with("--lines=")
                 || token.text.starts_with("--range=")
+                || token.text == "--start-line"
+                || token.text.starts_with("--start-line=")
         })
         .then(|| "rtk read --help".to_string())
 }
