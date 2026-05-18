@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v0.1.3 - 2026-05-18
+
 - Sync `Cargo.toml` and `Cargo.lock` to the release tag inside the release
   workflow so published binaries report the released version.
 - Rework installation around Codex-managed setup: publish release archives, move
