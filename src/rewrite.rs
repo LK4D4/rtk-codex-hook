@@ -974,31 +974,24 @@ fn rg_redirect(command: &str) -> Option<String> {
 
 fn rg_files_redirect(args: &[String]) -> Option<String> {
     let mut path: Option<String> = None;
-    let mut glob: Option<String> = None;
-    let mut index = 0;
-    while index < args.len() {
-        match args[index].as_str() {
+    for arg in args {
+        match arg.as_str() {
             "--files" => {}
-            "-g" | "--glob" => {
-                if glob.is_some() {
+            arg if arg.starts_with('-') => return None,
+            arg => {
+                if path.is_some() {
                     return None;
                 }
-                index += 1;
-                glob = args.get(index).cloned();
+                path = Some(arg.to_string());
             }
-            arg if arg.starts_with('-') => return None,
-            arg => path = Some(arg.to_string()),
         }
-        index += 1;
     }
 
     let path = path.unwrap_or_else(|| ".".to_string());
-    let mut parts = vec!["rtk".to_string(), "find".to_string(), quote_arg(&path)];
-    if let Some(glob) = glob {
-        parts.push("-name".to_string());
-        parts.push(quote_arg(&glob));
-    }
-    Some(parts.join(" "))
+    Some(format!(
+        "rtk find \"*\" {} --max 50 --file-type f",
+        quote_arg(&path)
+    ))
 }
 
 fn local_rtk_miss_fallback(command: &str) -> Option<String> {
@@ -1098,6 +1091,9 @@ fn blocks_external_posix_rewrite(command: &str) -> bool {
     let without_rtk = strip_rtk_prefix(command).unwrap_or(command);
     let tokens = tokenize(without_rtk);
     let first = tokens.first().map(|token| command_name(&token.text));
+    if first.as_deref() == Some("rg") {
+        return rg_redirect(without_rtk).is_none();
+    }
     matches!(
         first.as_deref(),
         Some("cat" | "head" | "tail" | "grep" | "find")

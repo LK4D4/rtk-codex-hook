@@ -139,10 +139,12 @@ Rewrite order:
   Windows aliases such as `ls` or `dir` with no path.
 - Simple non-recursive `findstr /N pattern` searches become `rtk grep -n`;
   recursive `/S` searches and other complex `findstr` modes are left alone.
-- Raw `rg` content searches become `rtk grep`, and `rg --files` file discovery
-  becomes `rtk find`. These stay local because the hook quotes PowerShell-
-  sensitive patterns and maps file discovery to `rtk find`. Unsupported `rg`
-  modes such as JSON output or multiple explicit `-e` patterns are left alone.
+- Raw `rg` content searches become `rtk grep`, and plain `rg --files` file
+  discovery becomes `rtk find "*" <path> --max 50 --file-type f`. Piped,
+  redirected, hidden, glob-filtered, multi-root, and otherwise flagged
+  `rg --files` forms are left alone because `rtk find` output and hidden-file
+  semantics are not equivalent. Unsupported `rg` modes such as JSON output or
+  multiple explicit `-e` patterns are left alone.
 
 ## Debugging
 

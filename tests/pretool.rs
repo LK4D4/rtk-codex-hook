@@ -456,8 +456,15 @@ fn raw_rg_redirects_to_rtk_grep_with_quoted_patterns() {
     );
     assert_no_output("rtk rg --json staleAlias src");
     assert_no_output("rtk rg -e staleAlias -e freshAlias src");
-    assert_deny("rg --files src", "rtk find src");
-    assert_deny("rg --files -g '*.rs'", "rtk find . -name *.rs");
+    assert_deny("rg --files", "rtk find \"*\" . --max 50 --file-type f");
+    assert_deny(
+        "rg --files src",
+        "rtk find \"*\" src --max 50 --file-type f",
+    );
+    assert_no_output("rg --files | head");
+    assert_no_output("rg --files > files.txt");
+    assert_no_output("rg --files --hidden");
+    assert_no_output("rg --files -g '*.rs'");
 }
 
 #[test]
