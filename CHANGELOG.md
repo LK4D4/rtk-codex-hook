@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Make `Cargo.toml` and `Cargo.lock` the release version source of truth, and
+  fail the GitHub release workflow when the tag does not match the package
+  version.
+
 ## v0.1.3 - 2026-05-18
 
 - Sync `Cargo.toml` and `Cargo.lock` to the release tag inside the release

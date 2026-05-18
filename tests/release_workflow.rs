@@ -1,5 +1,5 @@
 #[test]
-fn release_workflow_syncs_cargo_version_from_release_tag() {
+fn release_workflow_requires_cargo_version_to_match_release_tag() {
     let workflow =
         std::fs::read_to_string(".github/workflows/release.yml").expect("read release workflow");
 
@@ -8,11 +8,16 @@ fn release_workflow_syncs_cargo_version_from_release_tag() {
         "release workflow should derive a single release tag from push and manual runs"
     );
     assert!(
-        workflow.contains("Cargo.toml") && workflow.contains("$version"),
-        "release workflow should update Cargo.toml package.version before building"
+        workflow.contains("$cargoVersion") && workflow.contains("$tagVersion"),
+        "release workflow should compare Cargo.toml package.version with the release tag"
     );
     assert!(
-        workflow.contains("cargo update -p rtk-codex-hook --precise $version"),
-        "release workflow should keep Cargo.lock aligned with the release version"
+        workflow.contains("Cargo.toml version $cargoVersion does not match release tag $tag"),
+        "release workflow should fail when Cargo.toml and the release tag diverge"
+    );
+    assert!(
+        !workflow.contains("Set-Content -LiteralPath Cargo.toml")
+            && !workflow.contains("cargo update -p rtk-codex-hook --precise"),
+        "release workflow should not mutate Cargo.toml or Cargo.lock in the build workspace"
     );
 }

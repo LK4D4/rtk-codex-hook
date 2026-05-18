@@ -56,7 +56,7 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
-      - name: Sync Cargo version from release tag
+      - name: Verify Cargo version matches release tag
         shell: pwsh
         run: |
           $tag = $env:RELEASE_TAG
@@ -64,35 +64,19 @@ jobs:
             throw "Release tag must look like v1.2.3; got '$tag'"
           }
 
-          $version = $Matches.version
-          $lines = Get-Content -LiteralPath Cargo.toml
-          $inPackage = $false
-          $updated = $false
+          $tagVersion = $Matches.version
+          $metadata = cargo metadata --locked --format-version 1 | ConvertFrom-Json
+          $cargoVersion = $metadata.packages |
+            Where-Object { $_.name -eq "rtk-codex-hook" } |
+            Select-Object -ExpandProperty version -First 1
 
-          for ($i = 0; $i -lt $lines.Count; $i++) {
-            if ($lines[$i] -match '^\[package\]\s*$') {
-              $inPackage = $true
-              continue
-            }
-
-            if ($inPackage -and $lines[$i] -match '^\[') {
-              break
-            }
-
-            if ($inPackage -and $lines[$i] -match '^version\s*=') {
-              $lines[$i] = "version = `"$version`""
-              $updated = $true
-              break
-            }
+          if (-not $cargoVersion) {
+            throw "Cargo.toml package.version not found for rtk-codex-hook"
           }
 
-          if (-not $updated) {
-            throw "Cargo.toml package.version not found"
+          if ($cargoVersion -ne $tagVersion) {
+            throw "Cargo.toml version $cargoVersion does not match release tag $tag"
           }
-
-          Set-Content -LiteralPath Cargo.toml -Value $lines
-          cargo update -p rtk-codex-hook --precise $version
-          cargo metadata --locked --format-version 1 | Out-Null
 
       - name: Build
         run: cargo build --profile dist --target ${{ matrix.target }} --locked
