@@ -16,6 +16,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
   build:
@@ -45,6 +46,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Install target
         run: rustup target add ${{ matrix.target }}
@@ -52,6 +55,44 @@ jobs:
       - name: Install musl tools
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Sync Cargo version from release tag
+        shell: pwsh
+        run: |
+          $tag = $env:RELEASE_TAG
+          if ($tag -notmatch '^v(?<version>\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)$') {
+            throw "Release tag must look like v1.2.3; got '$tag'"
+          }
+
+          $version = $Matches.version
+          $lines = Get-Content -LiteralPath Cargo.toml
+          $inPackage = $false
+          $updated = $false
+
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^\[package\]\s*$') {
+              $inPackage = $true
+              continue
+            }
+
+            if ($inPackage -and $lines[$i] -match '^\[') {
+              break
+            }
+
+            if ($inPackage -and $lines[$i] -match '^version\s*=') {
+              $lines[$i] = "version = `"$version`""
+              $updated = $true
+              break
+            }
+          }
+
+          if (-not $updated) {
+            throw "Cargo.toml package.version not found"
+          }
+
+          Set-Content -LiteralPath Cargo.toml -Value $lines
+          cargo update -p rtk-codex-hook --precise $version
+          cargo metadata --locked --format-version 1 | Out-Null
 
       - name: Build
         run: cargo build --profile dist --target ${{ matrix.target }} --locked
@@ -117,6 +158,6 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
           generate_release_notes: true
           files: dist/**/*

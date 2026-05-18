@@ -28,7 +28,10 @@ cargo build --release
 
 Release artifacts are built by `.github/workflows/release.yml` when a tag like
 `v0.1.0` is pushed. The workflow publishes platform archives and `SHA256SUMS` to
-the GitHub release.
+the GitHub release. During the release build, the workflow derives the package
+version from the release tag, updates `Cargo.toml` and `Cargo.lock` in the
+checked-out build workspace, and then builds with `--locked` so `--version`
+matches the published tag.
 
 ```powershell
 git tag v0.1.0
