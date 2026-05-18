@@ -14,18 +14,46 @@ local repo checkout.
    - Windows: `%LOCALAPPDATA%\rtk-codex-hook\bin\rtk-codex-hook.exe`
    - Unix: `~/.local/bin/rtk-codex-hook`
 4. Register hook by editing Codex config:
+   - Read the official Codex hooks docs first:
+     `https://developers.openai.com/codex/hooks`
+   - Use only the current Codex hook schema from that page. Do not use Claude
+     hook schema or invent a flatter shape.
    - Use `CODEX_HOME` if set; otherwise use `%USERPROFILE%\.codex` on Windows
      or `~/.codex` on Unix.
    - Create Codex home if missing.
-   - Read `hooks.json` if present; if absent, start from `{}`.
+   - For this install, edit `hooks.json`. If it exists, read it first; if
+     absent, start from `{}`.
    - If `hooks.json` exists, write `hooks.json.bak` before changing it.
-   - Ensure `hooks.PreToolUse` exists as an array.
-   - Add `{ "command": "<absolute installed binary path>" }` only if that exact
-     command is absent.
+   - Ensure `hooks.PreToolUse` exists as an array of matcher groups. Each
+     matcher group has optional `matcher` and required `hooks` array. Each
+     handler in that inner `hooks` array must include `type: "command"` and
+     `command`.
+   - Add this handler only if the exact command is absent anywhere under
+     `hooks.PreToolUse[].hooks[]`:
+
+     ```json
+     {
+       "matcher": "Bash",
+       "hooks": [
+         {
+           "type": "command",
+           "command": "<absolute installed binary path>",
+           "statusMessage": "Checking RTK command suggestions"
+         }
+       ]
+     }
+     ```
+
+   - If a `PreToolUse` matcher group for `Bash` already exists, append the
+     command handler to that group's inner `hooks` array instead of adding a
+     duplicate matcher group.
+   - Do not add direct `hooks.PreToolUse[].command` entries.
+   - Do not use `updatedInput`; Codex currently parses it but does not support
+     it for command rewrites.
    - Preserve all existing hooks and unknown fields.
    - Write pretty JSON plus trailing newline.
-   - Confirm `hooks.json` has `hooks.PreToolUse[].command` equal to absolute
-     installed binary path.
+   - Confirm `hooks.json` has `hooks.PreToolUse[].hooks[].command` equal to the
+     absolute installed binary path.
 5. Verify with the absolute installed binary path:
    - `<absolute installed binary path> --version`
    - `<absolute installed binary path> --explain "git status --short"` prints
