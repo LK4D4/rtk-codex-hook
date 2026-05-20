@@ -95,9 +95,9 @@ Rewrite order:
 
 - Already preferred RTK commands are left alone, such as `rtk git status --short`.
   Invalid `rtk read` forms with invented window flags such as `--line`,
-  `--lines`, `--range`, or `--start-line` are denied with `rtk read --help` so
-  agents do not confuse RTK parse fallback errors with a missing `rtk read`
-  command.
+  `--lines`, `--range`, `--start-line`, `--start`, `--from`, `--to`, or
+  `--line-number` are denied with `rtk read --help` so agents do not confuse RTK
+  parse fallback errors with a missing `rtk read` command.
 - Mutating PowerShell commands are left alone, including `Remove-Item`,
   `Set-Content`, `Add-Content`, `New-Item`, `Move-Item`, and `Copy-Item`.
 - Windows/PowerShell and Unix shell reads/searches are handled locally first.
@@ -138,8 +138,9 @@ Rewrite order:
   the noisy inner tool. Complex shell control flow, pipes, redirects, and syntax
   checks such as `bash -n` are left alone.
 - Direct and wrapped PowerShell `Select-String`/`sls` becomes `rtk grep -n` for
-  simple `-Path`/`-Pattern` forms, with optional `-Context N` mapped to `-C N`.
-  Other switches are left alone.
+  simple `-Path`/`-Pattern` forms, with optional `-Context N` mapped to
+  ripgrep passthrough args after `--`, for example `-- -C N`. Other switches are
+  left alone.
 - Direct and wrapped PowerShell `Get-ChildItem`/`gci`/`dir` file discovery with
   an explicit path plus both `-Recurse` and `-File` becomes `rtk find`.
   Other switches such as `-Directory` or `-Filter` are left alone, as are bare
@@ -150,8 +151,9 @@ Rewrite order:
   discovery becomes `rtk find "*" <path> --max 50 --file-type f`. Piped,
   redirected, hidden, glob-filtered, multi-root, and otherwise flagged
   `rg --files` forms are left alone because `rtk find` output and hidden-file
-  semantics are not equivalent. Unsupported `rg` modes such as JSON output or
-  multiple explicit `-e` patterns are left alone.
+  semantics are not equivalent. Supported ripgrep search flags are passed after
+  `--` so `rtk grep` does not parse them as RTK options. Unsupported `rg` modes
+  such as JSON output or multiple explicit `-e` patterns are left alone.
 
 ## Debugging
 

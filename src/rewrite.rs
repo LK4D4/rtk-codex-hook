@@ -43,12 +43,18 @@ fn invalid_rtk_read_redirect(command: &str) -> Option<String> {
         .iter()
         .skip(2)
         .any(|token| {
-            matches!(token.text.as_str(), "--line" | "--lines" | "--range")
-                || token.text.starts_with("--line=")
+            matches!(
+                token.text.as_str(),
+                "--line" | "--lines" | "--range" | "--start" | "--from" | "--to" | "--line-number"
+            ) || token.text.starts_with("--line=")
                 || token.text.starts_with("--lines=")
                 || token.text.starts_with("--range=")
                 || token.text == "--start-line"
                 || token.text.starts_with("--start-line=")
+                || token.text.starts_with("--start=")
+                || token.text.starts_with("--from=")
+                || token.text.starts_with("--to=")
+                || token.text.starts_with("--line-number=")
         })
         .then(|| "rtk read --help".to_string())
 }
@@ -603,7 +609,7 @@ fn pipeline_select_string_redirect(inner: &str) -> Option<String> {
         quote_arg(&path)
     );
     if let Some(context) = context_number(search_command) {
-        suggestion.push_str(&format!(" -C {context}"));
+        append_grep_extra(&mut suggestion, ["-C".to_string(), context.to_string()]);
     }
     Some(suggestion)
 }
@@ -624,9 +630,22 @@ fn select_string_redirect(inner: &str) -> Option<String> {
         quote_arg(&path)
     );
     if let Some(context) = context_number(inner) {
-        suggestion.push_str(&format!(" -C {context}"));
+        append_grep_extra(&mut suggestion, ["-C".to_string(), context.to_string()]);
     }
     Some(suggestion)
+}
+
+fn append_grep_extra(suggestion: &mut String, extras: impl IntoIterator<Item = String>) {
+    let extras = extras.into_iter().collect::<Vec<_>>();
+    if extras.is_empty() {
+        return;
+    }
+
+    suggestion.push_str(" --");
+    for extra in extras {
+        suggestion.push(' ');
+        suggestion.push_str(&quote_arg(&extra));
+    }
 }
 
 fn select_string_path(command: &str, command_index: usize) -> Option<String> {
@@ -936,12 +955,18 @@ fn rg_redirect(command: &str) -> Option<String> {
     let mut extra_options = Vec::new();
     let mut index = 0;
     while index < args.len() && args[index].starts_with('-') {
+        if args[index] == "--" {
+            index += 1;
+            break;
+        }
         let option = args[index].clone();
         let option_takes_value = value_options.contains(&option.as_str()) && index + 1 < args.len();
         if matches!(option.as_str(), "-n" | "--line-number") {
             rtk_options.push("-n".to_string());
-        } else {
+        } else if value_options.contains(&option.as_str()) || option == "--hidden" {
             extra_options.push(option);
+        } else {
+            return None;
         }
         if option_takes_value {
             index += 1;
@@ -970,7 +995,10 @@ fn rg_redirect(command: &str) -> Option<String> {
     } else if !extra_options.is_empty() {
         parts.push(".".to_string());
     }
-    parts.extend(extra_options.into_iter().map(|arg| quote_arg(&arg)));
+    if !extra_options.is_empty() {
+        parts.push("--".to_string());
+        parts.extend(extra_options.into_iter().map(|arg| quote_arg(&arg)));
+    }
     Some(parts.join(" "))
 }
 
@@ -1251,12 +1279,13 @@ fn is_search_path_token(token: &str) -> bool {
         || token.eq_ignore_ascii_case("tests")
         || token.eq_ignore_ascii_case("spec")
         || token.eq_ignore_ascii_case("docs")
+        || token.eq_ignore_ascii_case("suwayomi")
         || token.eq_ignore_ascii_case("README.md")
         || token.eq_ignore_ascii_case("AGENTS.md")
         || token.rsplit('.').next().is_some_and(|ext| {
             matches!(
                 ext.to_ascii_lowercase().as_str(),
-                "rs" | "md" | "txt" | "toml" | "yml" | "yaml" | "json"
+                "rs" | "lua" | "sh" | "md" | "txt" | "toml" | "yml" | "yaml" | "json"
             )
         })
 }
@@ -1273,7 +1302,17 @@ fn quote_arg(value: &str) -> String {
 }
 
 fn quote_pattern(value: &str) -> String {
-    format!("\"{}\"", value.replace('"', "\\\""))
+    let escaped = if value.starts_with('-') {
+        let leading_hyphens = value.chars().take_while(|ch| *ch == '-').count();
+        format!(
+            "{}{}",
+            r"\-".repeat(leading_hyphens),
+            &value[leading_hyphens..]
+        )
+    } else {
+        value.to_string()
+    };
+    format!("\"{}\"", escaped.replace('"', "\\\""))
 }
 
 fn quote_powershell_command_arg(value: &str) -> String {

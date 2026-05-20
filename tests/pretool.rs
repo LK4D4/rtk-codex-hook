@@ -220,6 +220,9 @@ fn invalid_rtk_read_flags_suggest_help() {
         "rtk read src/ui.lua --range 130:310",
         "rtk read docs/notes.md --start-line 130 --max-lines 60",
         "rtk read docs/notes.md --start-line=130 --max-lines 60",
+        "rtk read docs/notes.md --start 130 --max-lines 60",
+        "rtk read docs/notes.md --from 130 --to 190",
+        "rtk read docs/notes.md --line-number --max-lines 80",
     ] {
         assert_deny(command, "rtk read --help");
     }
@@ -349,7 +352,7 @@ fn unix_shell_wrappers_redirect_inner_test_tools() {
 fn select_string_redirects_to_rtk_grep() {
     assert_deny(
         r#"Select-String -Path 'src\main.rs' -Pattern 'foo' -Context 2"#,
-        r#"rtk grep -n "foo" src\main.rs -C 2"#,
+        r#"rtk grep -n "foo" src\main.rs -- -C 2"#,
     );
     assert_deny("sls foo src\\main.rs", r#"rtk grep -n "foo" src\main.rs"#);
     assert_deny(
@@ -358,7 +361,7 @@ fn select_string_redirects_to_rtk_grep() {
     );
     assert_deny(
         r#"powershell -NoProfile -Command Select-String -Path 'src\main.rs' -Pattern 'function' -Context 2"#,
-        r#"rtk grep -n "function" src\main.rs -C 2"#,
+        r#"rtk grep -n "function" src\main.rs -- -C 2"#,
     );
     assert_no_output("Select-String -Pattern foo");
     assert_no_output(r#"Select-String -Path src\main.rs -Pattern foo -SimpleMatch"#);
@@ -456,6 +459,19 @@ fn raw_rg_redirects_to_rtk_grep_with_quoted_patterns() {
         "rtk rg -n staleAlias src",
         r#"rtk grep -n "staleAlias" src"#,
     );
+    assert_deny(
+        r#"rg -n -C 2 "package\.loaded\.lfs" spec"#,
+        r#"rtk grep -n "package\.loaded\.lfs" spec -- -C 2"#,
+    );
+    assert_deny(
+        r#"rg -n --hidden --glob "!**/.git/**" "foo" src"#,
+        r#"rtk grep -n "foo" src -- --hidden --glob !**/.git/**"#,
+    );
+    assert_deny(
+        r#"rg -n -- "-- Boundary:|scaleBySize" suwayomi main.lua _meta.lua"#,
+        r#"rtk grep -n "\-\- Boundary:|scaleBySize" suwayomi main.lua _meta.lua"#,
+    );
+    assert_no_output(r#"rg -n "-- Boundary:|scaleBySize" suwayomi main.lua _meta.lua"#);
     assert_no_output("rtk rg --json staleAlias src");
     assert_no_output("rtk rg -e staleAlias -e freshAlias src");
     assert_deny("rg --files", "rtk find \"*\" . --max 50 --file-type f");

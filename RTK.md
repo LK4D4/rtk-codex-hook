@@ -36,9 +36,10 @@ rtk read app.log --tail-lines 80
 ```
 
 Valid flags: `--line-numbers`/`-n`, `--max-lines`, `--tail-lines`,
-`--level none|minimal|aggressive`. Do not invent `--range`, `--line`, or
-`--lines`. `rtk read` has no `--start-line` option; for middle-of-file windows
-use raw `sed -n '130,190p' path` instead of `rtk read --start-line ...`.
+`--level none|minimal|aggressive`. Do not invent `--range`, `--line`,
+`--lines`, `--start`, `--from`, `--to`, or `--line-number`. `rtk read` has no
+start-offset option; for middle-of-file windows use raw
+`sed -n '130,190p' path` instead of invented `rtk read` ranges.
 
 ## Read Levels
 
@@ -72,7 +73,12 @@ Use `rtk grep` for content search.
 ```bash
 rtk grep -n "pattern" src tests
 rtk grep -n "pattern|other" .
+rtk grep -n "pattern" src -- -C 3
+rtk grep -n "pattern" src -- --hidden --glob '!**/.git/**'
 ```
+
+Pass ripgrep-only flags after `--`; otherwise `rtk grep` parses them as RTK
+options.
 
 Use `rtk find` for simple file discovery, but prefer its RTK syntax:
 
