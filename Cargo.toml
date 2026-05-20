@@ -1,6 +1,6 @@
 [package]
 name = "rtk-codex-hook"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 rust-version = "1.85"
 description = "Codex PreToolUse hook that suggests lower-token RTK commands"
