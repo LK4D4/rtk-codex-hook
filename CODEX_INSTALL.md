@@ -38,7 +38,7 @@ local repo checkout.
          {
            "type": "command",
            "command": "<absolute installed binary path>",
-           "statusMessage": "Checking RTK command suggestions"
+            "statusMessage": "Checking RTK command rewrite"
          }
        ]
      }
@@ -48,8 +48,8 @@ local repo checkout.
      command handler to that group's inner `hooks` array instead of adding a
      duplicate matcher group.
    - Do not add direct `hooks.PreToolUse[].command` entries.
-   - Do not use `updatedInput`; Codex currently parses it but does not support
-     it for command rewrites.
+   - The hook binary owns runtime `updatedInput` responses; `hooks.json` config
+     shape does not change for command rewrites.
    - Preserve all existing hooks and unknown fields.
    - Write pretty JSON plus trailing newline.
    - Confirm `hooks.json` has `hooks.PreToolUse[].hooks[].command` equal to the

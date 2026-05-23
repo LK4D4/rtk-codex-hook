@@ -49,7 +49,7 @@ git push origin v0.1.0
 - `src/main.rs` handles CLI args, `--version`, `--explain`, stdin reads, and
   top-level fail-open error handling.
 - `src/hook.rs` parses Codex hook JSON, extracts the submitted command, and
-  formats deny JSON.
+  formats allow-rewrite or deny-guidance JSON.
 - `src/rewrite.rs` tokenizes shell-ish command strings and returns conservative
   RTK suggestions.
 - `tests/pretool.rs` exercises Codex-style hook payloads end-to-end.
@@ -57,8 +57,8 @@ git push origin v0.1.0
 
 The hook has two public modes:
 
-- Hook mode: read Codex JSON from stdin and print deny JSON only for a concrete
-  suggestion.
+- Hook mode: read Codex JSON from stdin and print JSON only for a concrete
+  rewrite or deny suggestion.
 - Explain mode: `rtk-codex-hook --explain "<command>"` prints the suggestion
   directly for local debugging.
 
@@ -67,7 +67,13 @@ The hook has two public modes:
 The hook must fail open. Malformed JSON, missing fields, unsupported commands,
 parser uncertainty, and internal errors exit `0` with no output.
 
-Deny output stays compact:
+For safe equivalent rewrites, allow output stays compact:
+
+```json
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"command":"<rewrite>"}}}
+```
+
+For non-equivalent guidance that should stay visible, deny output stays compact:
 
 ```json
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Use RTK-optimized command instead: <suggestion>"}}
@@ -82,14 +88,15 @@ The rewrite layer is intentionally generic. It should not add repo-specific or
 language-specific policy unless that behavior is designed as a general rule with
 tests.
 
-Rewrite order:
+Rewrite action order:
 
 1. Skip commands that are already good RTK forms.
 2. Reject destructive or mutating command shapes.
-3. Apply local high-confidence Windows/PowerShell and Unix read/search rewrites.
-4. Delegate generic commands to `rtk rewrite` when available.
-5. Use small local fallbacks for known noisy tools if delegation is unavailable.
-6. Return no suggestion when parsing is ambiguous.
+3. Auto-rewrite local high-confidence Windows/PowerShell and Unix read/search
+   forms when semantics are equivalent.
+4. Keep external `rtk rewrite`, wrapper-heavy rewrites, and broad noisy-tool
+   fallback suggestions as deny guidance until they are execution-proved.
+5. Return no output when parsing is ambiguous.
 
 ## What It Rewrites
 
@@ -100,12 +107,13 @@ Rewrite order:
   parse fallback errors with a missing `rtk read` command.
 - Mutating PowerShell commands are left alone, including `Remove-Item`,
   `Set-Content`, `Add-Content`, `New-Item`, `Move-Item`, and `Copy-Item`.
-- Windows/PowerShell and Unix shell reads/searches are handled locally first.
-  Generic cross-platform tools are delegated to `rtk rewrite`, such as
-  `git status --short` to `rtk git status --short` and `ls src` to
-  `rtk ls src`.
+- Windows/PowerShell and Unix shell reads/searches are handled locally first and
+  auto-rewritten only when the hook can preserve semantics.
+- Generic cross-platform tools are delegated to `rtk rewrite`, such as
+  `git status --short` to `rtk git status --short` and `ls src` to `rtk ls src`.
+  Delegated rewrites stay as deny guidance in the first `updatedInput` release.
 - If `rtk rewrite` is unavailable or returns no suggestion, a small local
-  fallback preserves legacy redirects for common noisy tools such as `git`,
+  fallback preserves legacy suggestions for common noisy tools such as `git`,
   `cargo`, `npm`, `pytest`, `busted`, `luacheck`, `dotnet`, `pnpm`, `pip`, `go`,
   `docker`, `npx`, `vitest`, `jest`, `tsc`, `ruff`, `mypy`, `playwright`,
   `gradlew`, and `curl`.
@@ -132,11 +140,13 @@ Rewrite order:
   `rtk grep -n` searches rather than `rtk read`.
 - PowerShell wrappers around `busted` and `luacheck` keep the `pwsh` wrapper
   for environment setup while applying `rtk` to the noisy inner tool. Existing
-  unsupported `rtk pwsh ...` commands are rewritten back to `pwsh ...`.
+  unsupported `rtk pwsh ...` commands are rewritten back to `pwsh ...`. Wrapper
+  rewrites stay as deny guidance until execution probes cover the quoting path.
 - Unix `bash -c`/`bash -lc` and `env VAR=...` wrappers around `busted` and
   `luacheck` keep the wrapper or environment setup raw while applying `rtk` to
-  the noisy inner tool. Complex shell control flow, pipes, redirects, and syntax
-  checks such as `bash -n` are left alone.
+  the noisy inner tool. Wrapper rewrites stay as deny guidance until execution
+  probes cover the quoting path. Complex shell control flow, pipes, redirects,
+  and syntax checks such as `bash -n` are left alone.
 - Direct and wrapped PowerShell `Select-String`/`sls` becomes `rtk grep -n` for
   simple `-Path`/`-Pattern` forms, with optional `-Context N` mapped to
   ripgrep passthrough args after `--`, for example `-- -C N`. Other switches are
@@ -147,8 +157,10 @@ Rewrite order:
   Windows aliases such as `ls` or `dir` with no path.
 - Simple non-recursive `findstr /N pattern` searches become `rtk grep -n`;
   recursive `/S` searches and other complex `findstr` modes are left alone.
-- Raw `rg` content searches become `rtk grep`, and plain `rg --files` file
-  discovery becomes `rtk find "*" <path> --max 50 --file-type f`. Piped,
+- Raw `rg` content searches become `rtk grep`. Plain `rg --files` file
+  discovery can be denied with `rtk find "*" <path> --max 50 --file-type f`
+  guidance, but is not auto-rewritten because that RTK form intentionally bounds
+  output. Piped,
   redirected, hidden, glob-filtered, multi-root, and otherwise flagged
   `rg --files` forms are left alone because `rtk find` output and hidden-file
   semantics are not equivalent. Supported ripgrep search flags are passed after

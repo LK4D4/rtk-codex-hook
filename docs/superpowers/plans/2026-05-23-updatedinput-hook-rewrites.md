@@ -173,7 +173,6 @@ assert_rewrite(
 assert_rewrite("Get-ChildItem -Path src -Recurse -File", "rtk find src");
 assert_rewrite("cat README.md", "rtk read README.md");
 assert_rewrite("grep -n tokenize src/rewrite.rs", r#"rtk grep -n "tokenize" src/rewrite.rs"#);
-assert_rewrite("rg --files", r#"rtk find "*" . --max 50 --file-type f"#);
 ```
 
 Keep these as `assert_deny`:
@@ -181,6 +180,7 @@ Keep these as `assert_deny`:
 ```rust
 assert_deny("git status --short", "rtk git status --short");
 assert_deny("ls src", "rtk ls src");
+assert_deny("rg --files", r#"rtk find "*" . --max 50 --file-type f"#);
 assert_deny(
     r#"powershell -NoProfile -Command $env:PATH = "$env:APPDATA\luarocks\bin;$env:PATH"; busted spec"#,
     r#"pwsh -NoProfile -Command '$env:PATH = "$env:APPDATA\luarocks\bin;$env:PATH"; rtk busted spec'"#,

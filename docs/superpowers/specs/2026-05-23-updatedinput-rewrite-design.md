@@ -216,7 +216,8 @@ Coverage must include at least one representative case in each lane:
 - Windows discovery: `Get-ChildItem -Recurse -File` -> `rtk find`.
 - Unix read: `cat`, `head`, `tail`, or `sed -n '1,Np'` -> `rtk read`.
 - Unix search/discovery: `grep -n` and `find -type f`.
-- Raw `rg` search and plain `rg --files`.
+- Raw `rg` search as auto-rewrite, with plain `rg --files` kept as deny
+  guidance because `rtk find --max 50` is intentionally bounded.
 - DenySuggestion cases: delegated rewrite such as `git status --short`, wrapper
   rewrite such as `$env:PATH=...; busted spec` or
   `bash -lc 'PATH=... busted spec'`, and invalid `rtk read --line`.
