@@ -2,14 +2,18 @@
 
 [![CI](https://github.com/LK4D4/rtk-codex-hook/actions/workflows/ci.yml/badge.svg)](https://github.com/LK4D4/rtk-codex-hook/actions/workflows/ci.yml)
 
-Cross-platform Codex `PreToolUse` hook for rewriting noisy commands into
-lower-token RTK commands.
+Codex `PreToolUse` hook for rewriting noisy Windows, PowerShell, and shell
+commands into lower-token RTK commands.
 
 The binary reads Codex hook JSON from stdin. For safe equivalent rewrites, it
 lets Codex run the RTK-shaped command through `updatedInput.command`.
 Unsupported, ambiguous, malformed, and mutating commands exit `0` with no output
 so the hook fails open. Non-equivalent guidance may still deny with a visible
 reason.
+
+It is especially useful on Windows, where Codex sessions often need pasteable
+PowerShell commands, `%LOCALAPPDATA%` installs, and conservative rewrites that
+avoid mutating or shell-sensitive commands.
 
 ## Install
 
@@ -19,7 +23,9 @@ Ask Codex:
 Install rtk-codex-hook from https://github.com/LK4D4/rtk-codex-hook on this machine.
 ```
 
-Codex can install from the GitHub release without a local repo checkout.
+Codex can install from the GitHub release without a local repo checkout. On
+Windows, it installs the release binary under `%LOCALAPPDATA%\rtk-codex-hook`
+and registers the hook in Codex config.
 
 Agent-facing install steps live in [`CODEX_INSTALL.md`](CODEX_INSTALL.md).
 
