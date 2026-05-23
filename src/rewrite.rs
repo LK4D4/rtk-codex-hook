@@ -21,6 +21,7 @@ pub fn action(command: &str) -> Option<HookAction> {
 
     invalid_rtk_read_redirect(command)
         .map(HookAction::DenySuggestion)
+        .or_else(|| invalid_rtk_grep_redirect(command).map(HookAction::DenySuggestion))
         .or_else(|| {
             if starts_with_rtk(command) && preferred_rtk_command(command)
                 || is_preferred_pwsh_wrapper(command)
@@ -96,8 +97,89 @@ fn invalid_rtk_read_redirect(command: &str) -> Option<String> {
                 || token.text.starts_with("--from=")
                 || token.text.starts_with("--to=")
                 || token.text.starts_with("--line-number=")
+                || looks_like_rtk_read_path_range(&token.text)
         })
         .then(|| "rtk read --help".to_string())
+}
+
+fn looks_like_rtk_read_path_range(value: &str) -> bool {
+    let Some((path, range)) = value.rsplit_once(':') else {
+        return false;
+    };
+    !path.is_empty()
+        && path != "."
+        && range.split_once('-').map_or_else(
+            || range.chars().all(|ch| ch.is_ascii_digit()),
+            |(start, end)| {
+                !start.is_empty()
+                    && !end.is_empty()
+                    && start.chars().all(|ch| ch.is_ascii_digit())
+                    && end.chars().all(|ch| ch.is_ascii_digit())
+            },
+        )
+}
+
+fn invalid_rtk_grep_redirect(command: &str) -> Option<String> {
+    let tokens = tokenize(command);
+    if command_name(&tokens.first()?.text) != "rtk" || command_name(&tokens.get(1)?.text) != "grep"
+    {
+        return None;
+    }
+
+    let passthrough_with_values = [
+        "-C",
+        "--context",
+        "-A",
+        "--after-context",
+        "-B",
+        "--before-context",
+    ];
+    let mut rtk_options = Vec::new();
+    let mut passthrough = Vec::new();
+    let mut index = 2;
+    while index < tokens.len() && tokens[index].text.starts_with('-') && tokens[index].text != "--"
+    {
+        let option = tokens[index].text.as_str();
+        if matches!(option, "-n" | "--line-number") {
+            rtk_options.push("-n".to_string());
+            index += 1;
+            continue;
+        }
+        if passthrough_with_values.contains(&option) && index + 1 < tokens.len() {
+            passthrough.push(tokens[index].text.clone());
+            index += 1;
+            passthrough.push(tokens[index].text.clone());
+            index += 1;
+            continue;
+        }
+        return None;
+    }
+
+    if passthrough.is_empty() || index >= tokens.len() || tokens[index].text == "--" {
+        return None;
+    }
+
+    let pattern = &tokens[index].text;
+    let paths = tokens[index + 1..]
+        .iter()
+        .take_while(|token| token.text != "--")
+        .map(|token| token.text.as_str())
+        .collect::<Vec<_>>();
+    if paths.iter().any(|path| path.starts_with('-')) {
+        return None;
+    }
+
+    let mut parts = vec!["rtk".to_string(), "grep".to_string()];
+    parts.extend(rtk_options);
+    parts.push(quote_pattern(pattern));
+    if paths.is_empty() {
+        parts.push(".".to_string());
+    } else {
+        parts.extend(paths.into_iter().map(quote_arg));
+    }
+    parts.push("--".to_string());
+    parts.extend(passthrough.into_iter().map(|arg| quote_arg(&arg)));
+    Some(parts.join(" "))
 }
 
 fn preferred_rtk_command(command: &str) -> bool {
@@ -1087,6 +1169,9 @@ fn is_rg_files_command(command: &str) -> bool {
 fn local_rtk_miss_fallback(command: &str) -> Option<String> {
     let tokens = tokenize(command);
     let first = tokens.first().map(|token| command_name(&token.text));
+    if is_git_diff_pathspec_command(command) {
+        return None;
+    }
     match first.as_deref() {
         Some("python") if python_pytest_args(&tokens).is_some() => {
             let args = python_pytest_args(&tokens)?;
@@ -1103,6 +1188,14 @@ fn local_rtk_miss_fallback(command: &str) -> Option<String> {
         ) => Some(format!("rtk {command}")),
         _ => None,
     }
+}
+
+fn is_git_diff_pathspec_command(command: &str) -> bool {
+    let tokens = tokenize(command);
+    tokens.len() >= 4
+        && command_name(&tokens[0].text) == "git"
+        && tokens.get(1).is_some_and(|token| token.text == "diff")
+        && tokens.iter().skip(2).any(|token| token.text == "--")
 }
 
 fn python_pytest_args(tokens: &[Token]) -> Option<String> {
@@ -1171,7 +1264,7 @@ fn rtk_rewrite(command: &str) -> Option<String> {
 }
 
 fn safe_external_rtk_rewrite(command: &str) -> Option<String> {
-    if blocks_external_posix_rewrite(command) {
+    if blocks_external_posix_rewrite(command) || is_git_diff_pathspec_command(command) {
         return None;
     }
     rtk_rewrite(command)

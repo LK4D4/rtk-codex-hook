@@ -103,8 +103,12 @@ Rewrite action order:
 - Already preferred RTK commands are left alone, such as `rtk git status --short`.
   Invalid `rtk read` forms with invented window flags such as `--line`,
   `--lines`, `--range`, `--start-line`, `--start`, `--from`, `--to`, or
-  `--line-number` are denied with `rtk read --help` so agents do not confuse RTK
-  parse fallback errors with a missing `rtk read` command.
+  `--line-number`, plus path range forms like `file.md:35-160`, are denied with
+  `rtk read --help` so agents do not confuse RTK parse fallback errors with a
+  missing `rtk read` command.
+- Invalid `rtk grep` forms that put ripgrep context flags such as `-C N` or
+  `--context N` before the pattern are denied with a corrected suggestion that
+  moves those flags after `--`.
 - Mutating PowerShell commands are left alone, including `Remove-Item`,
   `Set-Content`, `Add-Content`, `New-Item`, `Move-Item`, and `Copy-Item`.
 - Windows/PowerShell and Unix shell reads/searches are handled locally first and
@@ -112,6 +116,8 @@ Rewrite action order:
 - Generic cross-platform tools are delegated to `rtk rewrite`, such as
   `git status --short` to `rtk git status --short` and `ls src` to `rtk ls src`.
   Delegated rewrites stay as deny guidance in the first `updatedInput` release.
+  Raw `git diff -- path...` is left alone because the current RTK git wrapper
+  does not preserve Git pathspec separator behavior for that form.
 - If `rtk rewrite` is unavailable or returns no suggestion, a small local
   fallback preserves legacy suggestions for common noisy tools such as `git`,
   `cargo`, `npm`, `pytest`, `busted`, `luacheck`, `dotnet`, `pnpm`, `pip`, `go`,

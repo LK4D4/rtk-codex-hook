@@ -246,6 +246,8 @@ fn invalid_rtk_read_flags_suggest_help() {
         "rtk read src/client/source.lua --line 1 --lines 650",
         "rtk read src/ui.lua --line 1-120",
         "rtk read src/ui.lua --range 130:310",
+        "rtk read docs/notes.md:35-160",
+        "rtk read src/ui.lua:130",
         "rtk read docs/notes.md --start-line 130 --max-lines 60",
         "rtk read docs/notes.md --start-line=130 --max-lines 60",
         "rtk read docs/notes.md --start 130 --max-lines 60",
@@ -282,7 +284,20 @@ fn powershell_mutations_are_noops() {
 fn generic_rtk_rewrite_fallbacks_apply_to_common_tools() {
     assert_deny("git status --short", "rtk git status --short");
     assert_deny("ls src", "rtk ls src");
+    assert_no_output("git diff -- src/rewrite.rs tests/pretool.rs");
     assert_no_output("gh pr view --json title");
+}
+
+#[test]
+fn invalid_rtk_grep_passthrough_flags_are_corrected() {
+    assert_deny(
+        r#"rtk grep -n -C 25 "refreshChapterMenu" suwayomi spec"#,
+        r#"rtk grep -n "refreshChapterMenu" suwayomi spec -- -C 25"#,
+    );
+    assert_deny(
+        r#"rtk grep -n --context 4 "foo|bar" src tests"#,
+        r#"rtk grep -n "foo|bar" src tests -- --context 4"#,
+    );
 }
 
 #[test]
