@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v0.1.7 - 2026-05-23
+
+- Fail open for invalid already-RTK hook suggestions instead of suggesting
+  malformed `rtk read` or `rtk grep` commands.
+- Highlight Windows support in the README install guidance.
+
+## v0.1.4 - 2026-05-18
+
 - Make `Cargo.toml` and `Cargo.lock` the release version source of truth, and
   fail the GitHub release workflow when the tag does not match the package
   version.
