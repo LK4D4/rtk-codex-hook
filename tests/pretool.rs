@@ -188,6 +188,34 @@ fn assert_deny(command: &str, suggestion: &str) {
     );
 }
 
+fn assert_rewrite(command: &str, rewritten: &str) {
+    let output = run_command(command);
+    let value: serde_json::Value =
+        serde_json::from_str(&output).unwrap_or_else(|err| panic!("invalid json {err}: {output}"));
+    let hook = &value["hookSpecificOutput"];
+
+    assert_eq!(
+        "PreToolUse",
+        hook["hookEventName"].as_str().expect("hookEventName")
+    );
+    assert_eq!(
+        "allow",
+        hook["permissionDecision"]
+            .as_str()
+            .expect("permissionDecision")
+    );
+    assert_eq!(
+        rewritten,
+        hook["updatedInput"]["command"]
+            .as_str()
+            .expect("updatedInput.command")
+    );
+    assert!(
+        hook.get("permissionDecisionReason").is_none(),
+        "allow rewrite should not include permissionDecisionReason: {output}"
+    );
+}
+
 #[test]
 fn fails_open_for_non_pretooluse_and_bad_payloads() {
     let non_pretool = serde_json::json!({
@@ -259,36 +287,36 @@ fn generic_rtk_rewrite_fallbacks_apply_to_common_tools() {
 
 #[test]
 fn get_content_redirects_to_rtk_read() {
-    assert_deny(
+    assert_rewrite(
         r#"Get-Content -TotalCount 14 'src\main.rs'"#,
         r#"rtk read src\main.rs --max-lines 14"#,
     );
-    assert_deny("gc README.md", "rtk read README.md");
-    assert_deny(
+    assert_rewrite("gc README.md", "rtk read README.md");
+    assert_rewrite(
         "cat -Tail 20 README.md",
         "rtk read README.md --tail-lines 20",
     );
-    assert_deny(
+    assert_rewrite(
         "type -TotalCount 10 src\\rewrite.rs",
         "rtk read src\\rewrite.rs --max-lines 10",
     );
-    assert_deny(
+    assert_rewrite(
         r#"powershell -NoProfile -Command Get-Content -LiteralPath 'src\main.rs' -TotalCount 80"#,
         r#"rtk read src\main.rs --max-lines 80"#,
     );
-    assert_deny(
+    assert_rewrite(
         r#"powershell -NoProfile -Command Get-Content -LiteralPath 'src\main.rs' -TotalCount 140"#,
         r#"rtk read src\main.rs --max-lines 140"#,
     );
-    assert_deny(
+    assert_rewrite(
         r#"powershell -NoProfile -Command Get-Content -LiteralPath 'README.md' -TotalCount 80"#,
         "rtk read README.md --max-lines 80",
     );
-    assert_deny(
+    assert_rewrite(
         "Get-Content -Tail 30 README.md",
         "rtk read README.md --tail-lines 30",
     );
-    assert_deny(
+    assert_rewrite(
         r#"powershell -NoProfile -Command Get-Content -LiteralPath 'README.md' -Tail 30"#,
         "rtk read README.md --tail-lines 30",
     );
@@ -350,16 +378,16 @@ fn unix_shell_wrappers_redirect_inner_test_tools() {
 
 #[test]
 fn select_string_redirects_to_rtk_grep() {
-    assert_deny(
+    assert_rewrite(
         r#"Select-String -Path 'src\main.rs' -Pattern 'foo' -Context 2"#,
         r#"rtk grep -n "foo" src\main.rs -- -C 2"#,
     );
-    assert_deny("sls foo src\\main.rs", r#"rtk grep -n "foo" src\main.rs"#);
-    assert_deny(
+    assert_rewrite("sls foo src\\main.rs", r#"rtk grep -n "foo" src\main.rs"#);
+    assert_rewrite(
         r#"powershell -NoProfile -Command Select-String -Path 'src\main.rs' -Pattern 'function'"#,
         r#"rtk grep -n "function" src\main.rs"#,
     );
-    assert_deny(
+    assert_rewrite(
         r#"powershell -NoProfile -Command Select-String -Path 'src\main.rs' -Pattern 'function' -Context 2"#,
         r#"rtk grep -n "function" src\main.rs -- -C 2"#,
     );
@@ -369,10 +397,10 @@ fn select_string_redirects_to_rtk_grep() {
 
 #[test]
 fn get_child_item_redirects_to_rtk_find() {
-    assert_deny("Get-ChildItem -Path src -Recurse -File", "rtk find src");
-    assert_deny("gci src -Recurse -File", "rtk find src");
-    assert_deny("dir src -Recurse -File", "rtk find src");
-    assert_deny(
+    assert_rewrite("Get-ChildItem -Path src -Recurse -File", "rtk find src");
+    assert_rewrite("gci src -Recurse -File", "rtk find src");
+    assert_rewrite("dir src -Recurse -File", "rtk find src");
+    assert_rewrite(
         "powershell -NoProfile -Command Get-ChildItem -Path src -Recurse -File",
         "rtk find src",
     );
@@ -387,15 +415,15 @@ fn get_child_item_redirects_to_rtk_find() {
 
 #[test]
 fn pipelines_prioritize_search_over_read() {
-    assert_deny(
+    assert_rewrite(
         "Get-Content src\\rewrite.rs | Select-String -Pattern tokenize",
         r#"rtk grep -n "tokenize" src\rewrite.rs"#,
     );
-    assert_deny(
+    assert_rewrite(
         "Get-Content src\\rewrite.rs|Select-String -Pattern tokenize",
         r#"rtk grep -n "tokenize" src\rewrite.rs"#,
     );
-    assert_deny(
+    assert_rewrite(
         "gc src\\rewrite.rs | sls tokenize",
         r#"rtk grep -n "tokenize" src\rewrite.rs"#,
     );
@@ -437,7 +465,7 @@ fn noisy_tool_allowlist_redirects_to_rtk() {
 
 #[test]
 fn cmd_findstr_redirects_when_simple_search() {
-    assert_deny(
+    assert_rewrite(
         "findstr /N tokenize src\\rewrite.rs",
         r#"rtk grep -n "tokenize" src\rewrite.rs"#,
     );
@@ -447,27 +475,27 @@ fn cmd_findstr_redirects_when_simple_search() {
 
 #[test]
 fn raw_rg_redirects_to_rtk_grep_with_quoted_patterns() {
-    assert_deny(
+    assert_rewrite(
         "rg -n showExtensionsMenu src tests",
         r#"rtk grep -n "showExtensionsMenu" src tests"#,
     );
-    assert_deny(
+    assert_rewrite(
         "rg -n showExtensionsMenu|updateExtensionsMenu src tests",
         r#"rtk grep -n "showExtensionsMenu|updateExtensionsMenu" src tests"#,
     );
-    assert_deny(
+    assert_rewrite(
         "rtk rg -n staleAlias src",
         r#"rtk grep -n "staleAlias" src"#,
     );
-    assert_deny(
+    assert_rewrite(
         r#"rg -n -C 2 "package\.loaded\.lfs" spec"#,
         r#"rtk grep -n "package\.loaded\.lfs" spec -- -C 2"#,
     );
-    assert_deny(
+    assert_rewrite(
         r#"rg -n --hidden --glob "!**/.git/**" "foo" src"#,
         r#"rtk grep -n "foo" src -- --hidden --glob !**/.git/**"#,
     );
-    assert_deny(
+    assert_rewrite(
         r#"rg -n -- "-- Boundary:|scaleBySize" suwayomi main.lua _meta.lua"#,
         r#"rtk grep -n "\-\- Boundary:|scaleBySize" suwayomi main.lua _meta.lua"#,
     );
@@ -487,27 +515,27 @@ fn raw_rg_redirects_to_rtk_grep_with_quoted_patterns() {
 
 #[test]
 fn unix_shell_reads_redirect_to_rtk_read() {
-    assert_deny("cat README.md", "rtk read README.md");
-    assert_deny(
+    assert_rewrite("cat README.md", "rtk read README.md");
+    assert_rewrite(
         "head -n 40 src/main.rs",
         "rtk read src/main.rs --max-lines 40",
     );
-    assert_deny(
+    assert_rewrite(
         "head -40 src/main.rs",
         "rtk read src/main.rs --max-lines 40",
     );
-    assert_deny("tail -n 25 README.md", "rtk read README.md --tail-lines 25");
-    assert_deny("tail -25 README.md", "rtk read README.md --tail-lines 25");
-    assert_deny(
+    assert_rewrite("tail -n 25 README.md", "rtk read README.md --tail-lines 25");
+    assert_rewrite("tail -25 README.md", "rtk read README.md --tail-lines 25");
+    assert_rewrite(
         "sed -n '1,120p' src/rewrite.rs",
         "rtk read src/rewrite.rs --max-lines 120",
     );
-    assert_deny(
+    assert_rewrite(
         "rtk sed -n 1,80p README.md",
         "rtk read README.md --max-lines 80",
     );
-    assert_deny("nl -ba src/rewrite.rs", "rtk read -n src/rewrite.rs");
-    assert_deny("rtk nl -ba README.md", "rtk read -n README.md");
+    assert_rewrite("nl -ba src/rewrite.rs", "rtk read -n src/rewrite.rs");
+    assert_rewrite("rtk nl -ba README.md", "rtk read -n README.md");
 
     assert_no_output("cat src/main.rs README.md");
     assert_no_output("cat README.md > copy.md");
@@ -523,16 +551,16 @@ fn unix_shell_reads_redirect_to_rtk_read() {
 
 #[test]
 fn unix_shell_search_and_find_redirects_are_conservative() {
-    assert_deny(
+    assert_rewrite(
         "grep -n tokenize src/rewrite.rs",
         r#"rtk grep -n "tokenize" src/rewrite.rs"#,
     );
-    assert_deny(
+    assert_rewrite(
         r#"grep -n "foo|bar" src/rewrite.rs tests/pretool.rs"#,
         r#"rtk grep -n "foo|bar" src/rewrite.rs tests/pretool.rs"#,
     );
-    assert_deny("find src -type f", "rtk find src");
-    assert_deny("find . -type f", "rtk find .");
+    assert_rewrite("find src -type f", "rtk find src");
+    assert_rewrite("find . -type f", "rtk find .");
 
     assert_no_output("grep -r tokenize src");
     assert_no_output("grep -v tokenize src/rewrite.rs");

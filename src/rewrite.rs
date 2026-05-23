@@ -1,34 +1,75 @@
 use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HookAction {
+    AutoRewrite(String),
+    DenySuggestion(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Token {
     text: String,
     start: usize,
     end: usize,
 }
 
-pub fn suggest(command: &str) -> Option<String> {
+pub fn action(command: &str) -> Option<HookAction> {
     let command = command.trim();
     if command.is_empty() {
         return None;
     }
 
-    invalid_rtk_read_redirect(command).or_else(|| {
-        if starts_with_rtk(command) && preferred_rtk_command(command)
-            || is_preferred_pwsh_wrapper(command)
-            || is_preferred_bash_wrapper(command)
-        {
-            return None;
-        }
+    invalid_rtk_read_redirect(command)
+        .map(HookAction::DenySuggestion)
+        .or_else(|| {
+            if starts_with_rtk(command) && preferred_rtk_command(command)
+                || is_preferred_pwsh_wrapper(command)
+                || is_preferred_bash_wrapper(command)
+            {
+                return None;
+            }
 
-        direct_powershell_redirect(command)
-            .or_else(|| powershell_redirect(command))
-            .or_else(|| env_redirect(command))
-            .or_else(|| bash_redirect(command))
-            .or_else(|| posix_redirect(command))
-            .or_else(|| rg_redirect(command))
-            .or_else(|| safe_external_rtk_rewrite(command))
-            .or_else(|| local_rtk_miss_fallback(command))
+            let lossy_read_window = select_skip_first(command).is_some();
+            let rg_files = is_rg_files_command(command);
+
+            direct_powershell_redirect(command)
+                .map(|suggestion| {
+                    if lossy_read_window {
+                        HookAction::DenySuggestion(suggestion)
+                    } else {
+                        HookAction::AutoRewrite(suggestion)
+                    }
+                })
+                .or_else(|| {
+                    powershell_safe_redirect(command).map(|suggestion| {
+                        if lossy_read_window {
+                            HookAction::DenySuggestion(suggestion)
+                        } else {
+                            HookAction::AutoRewrite(suggestion)
+                        }
+                    })
+                })
+                .or_else(|| powershell_wrapper_redirect(command).map(HookAction::DenySuggestion))
+                .or_else(|| env_redirect(command).map(HookAction::DenySuggestion))
+                .or_else(|| bash_redirect(command).map(HookAction::DenySuggestion))
+                .or_else(|| posix_redirect(command).map(HookAction::AutoRewrite))
+                .or_else(|| {
+                    rg_redirect(command).map(|suggestion| {
+                        if rg_files {
+                            HookAction::DenySuggestion(suggestion)
+                        } else {
+                            HookAction::AutoRewrite(suggestion)
+                        }
+                    })
+                })
+                .or_else(|| safe_external_rtk_rewrite(command).map(HookAction::DenySuggestion))
+                .or_else(|| local_rtk_miss_fallback(command).map(HookAction::DenySuggestion))
+        })
+}
+
+pub fn suggest(command: &str) -> Option<String> {
+    action(command).map(|action| match action {
+        HookAction::AutoRewrite(command) | HookAction::DenySuggestion(command) => command,
     })
 }
 
@@ -131,7 +172,7 @@ fn direct_powershell_redirect(command: &str) -> Option<String> {
     }
 }
 
-fn powershell_redirect(command: &str) -> Option<String> {
+fn powershell_safe_redirect(command: &str) -> Option<String> {
     let without_rtk = strip_rtk_prefix(command).unwrap_or(command);
     let inner = inner_powershell_command(without_rtk)?;
 
@@ -141,9 +182,19 @@ fn powershell_redirect(command: &str) -> Option<String> {
 
     pipeline_select_string_redirect(&inner)
         .or_else(|| content_redirect(&inner))
-        .or_else(|| test_tool_redirect(&inner))
         .or_else(|| select_string_redirect(&inner))
         .or_else(|| get_child_item_redirect(&inner))
+}
+
+fn powershell_wrapper_redirect(command: &str) -> Option<String> {
+    let without_rtk = strip_rtk_prefix(command).unwrap_or(command);
+    let inner = inner_powershell_command(without_rtk)?;
+
+    if contains_mutating_powershell(&inner) {
+        return None;
+    }
+
+    test_tool_redirect(&inner)
 }
 
 fn strip_rtk_prefix(command: &str) -> Option<&str> {
@@ -1022,6 +1073,15 @@ fn rg_files_redirect(args: &[String]) -> Option<String> {
         "rtk find \"*\" {} --max 50 --file-type f",
         quote_arg(&path)
     ))
+}
+
+fn is_rg_files_command(command: &str) -> bool {
+    let without_rtk = strip_rtk_prefix(command).unwrap_or(command);
+    let tokens = tokenize(without_rtk);
+    tokens
+        .first()
+        .is_some_and(|token| command_name(&token.text) == "rg")
+        && tokens.iter().any(|token| token.text == "--files")
 }
 
 fn local_rtk_miss_fallback(command: &str) -> Option<String> {

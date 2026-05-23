@@ -28,11 +28,31 @@ pub fn handle_stdin(stdin: &str) -> Option<String> {
         return None;
     }
 
-    let suggestion = crate::rewrite::suggest(command)?;
-    log(&format!(
-        "deny original=[{command}] suggestion=[{suggestion}]"
-    ));
-    Some(deny_json(&suggestion))
+    match crate::rewrite::action(command)? {
+        crate::rewrite::HookAction::AutoRewrite(rewrite) => {
+            log(&format!("allow original=[{command}] rewrite=[{rewrite}]"));
+            Some(allow_json(&rewrite))
+        }
+        crate::rewrite::HookAction::DenySuggestion(suggestion) => {
+            log(&format!(
+                "deny original=[{command}] suggestion=[{suggestion}]"
+            ));
+            Some(deny_json(&suggestion))
+        }
+    }
+}
+
+fn allow_json(command: &str) -> String {
+    serde_json::json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "allow",
+            "updatedInput": {
+                "command": command
+            }
+        }
+    })
+    .to_string()
 }
 
 fn deny_json(suggestion: &str) -> String {
