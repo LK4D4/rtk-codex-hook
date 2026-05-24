@@ -297,6 +297,11 @@ fn generic_rtk_rewrite_fallbacks_apply_to_common_tools() {
 fn unsafe_external_rewrite_suggestions_stay_visible_or_fail_open() {
     assert_no_output("cat README.md > copy.md");
     assert_no_output("cat README.md | tee copy.md");
+    assert_no_output("git status --short && echo done");
+    assert_no_output("git status --short; echo done");
+    assert_no_output("git status --short & echo done");
+    assert_no_output("git status --short `echo done`");
+    assert_no_output("git status --short $(echo done)");
     assert_no_output("grep -r tokenize src");
     assert_no_output("grep -v tokenize src/rewrite.rs");
     assert_no_output("find src -delete");

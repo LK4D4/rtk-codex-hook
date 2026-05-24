@@ -65,11 +65,11 @@ pub fn action(command: &str) -> Option<HookAction> {
                 })
                 .or_else(|| {
                     safe_external_rtk_rewrite(command)
-                        .map(|suggestion| classify_external_rewrite(command, suggestion))
+                        .and_then(|suggestion| classify_external_rewrite(command, suggestion))
                 })
                 .or_else(|| {
                     local_rtk_miss_fallback(command)
-                        .map(|suggestion| classify_external_rewrite(command, suggestion))
+                        .and_then(|suggestion| classify_external_rewrite(command, suggestion))
                 })
         })
 }
@@ -1240,11 +1240,15 @@ fn same_rtk_pytest_tokens(args: &[Token], suggestion: &[Token]) -> bool {
         && token_texts(&suggestion[2..]) == token_texts(args)
 }
 
-fn classify_external_rewrite(original: &str, suggestion: String) -> HookAction {
+fn classify_external_rewrite(original: &str, suggestion: String) -> Option<HookAction> {
+    if !is_single_simple_command(original) || !is_single_simple_command(&suggestion) {
+        return None;
+    }
+
     if is_safe_external_rewrite(original, &suggestion) {
-        HookAction::AutoRewrite(suggestion)
+        Some(HookAction::AutoRewrite(suggestion))
     } else {
-        HookAction::DenySuggestion(suggestion)
+        Some(HookAction::DenySuggestion(suggestion))
     }
 }
 
