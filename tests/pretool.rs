@@ -282,10 +282,27 @@ fn powershell_mutations_are_noops() {
 
 #[test]
 fn generic_rtk_rewrite_fallbacks_apply_to_common_tools() {
-    assert_deny("git status --short", "rtk git status --short");
-    assert_deny("ls src", "rtk ls src");
+    assert_rewrite("git status --short", "rtk git status --short");
+    assert_rewrite("ls src", "rtk ls src");
+    assert_rewrite("cargo test", "rtk cargo test");
+    assert_rewrite("npm test", "rtk npm test");
+    assert_rewrite("pytest -q", "rtk pytest -q");
+    assert_rewrite("docker ps", "rtk docker ps");
+    assert_rewrite("curl --version", "rtk curl --version");
     assert_no_output("git diff -- src/rewrite.rs tests/pretool.rs");
     assert_no_output("gh pr view --json title");
+}
+
+#[test]
+fn unsafe_external_rewrite_suggestions_stay_visible_or_fail_open() {
+    assert_no_output("cat README.md > copy.md");
+    assert_no_output("cat README.md | tee copy.md");
+    assert_no_output("grep -r tokenize src");
+    assert_no_output("grep -v tokenize src/rewrite.rs");
+    assert_no_output("find src -delete");
+    assert_deny("uv pip install pytest", "rtk uv pip install pytest");
+    assert_no_output("unknown-tool --version");
+    assert_no_output("rtk git status --short");
 }
 
 #[test]
@@ -420,7 +437,7 @@ fn get_child_item_redirects_to_rtk_find() {
         "rtk find src",
     );
     assert_no_output("dir");
-    assert_deny("ls src", "rtk ls src");
+    assert_rewrite("ls src", "rtk ls src");
     assert_no_output("Get-ChildItem -Path src -File");
     assert_no_output("dir src -Recurse");
     assert_no_output("Get-ChildItem -Path src | Out-File files.txt");
@@ -466,14 +483,14 @@ fn noisy_tool_allowlist_redirects_to_rtk() {
         "gradlew",
         "curl",
     ] {
-        assert_deny(
+        assert_rewrite(
             &format!("{tool} --version"),
             &format!("rtk {tool} --version"),
         );
     }
 
-    assert_deny("python -m pytest tests", "rtk pytest tests");
-    assert_deny("uv run pytest tests", "rtk pytest tests");
+    assert_rewrite("python -m pytest tests", "rtk pytest tests");
+    assert_rewrite("uv run pytest tests", "rtk pytest tests");
     assert_no_output("python -m pip install pytest");
     assert_deny("uv pip install pytest", "rtk uv pip install pytest");
 }
