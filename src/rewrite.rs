@@ -1198,6 +1198,9 @@ fn has_unquoted_shell_control(command: &str) -> bool {
     let mut chars = command.chars().peekable();
     while let Some(ch) = chars.next() {
         match (quote, ch) {
+            (Some(_), '\\') => {
+                chars.next();
+            }
             (Some(q), c) if c == q => quote = None,
             (Some(_), _) => {}
             (None, '\'' | '"') => quote = Some(ch),
