@@ -63,8 +63,14 @@ pub fn action(command: &str) -> Option<HookAction> {
                         }
                     })
                 })
-                .or_else(|| safe_external_rtk_rewrite(command).map(HookAction::DenySuggestion))
-                .or_else(|| local_rtk_miss_fallback(command).map(HookAction::DenySuggestion))
+                .or_else(|| {
+                    safe_external_rtk_rewrite(command)
+                        .map(|suggestion| classify_external_rewrite(command, suggestion))
+                })
+                .or_else(|| {
+                    local_rtk_miss_fallback(command)
+                        .map(|suggestion| classify_external_rewrite(command, suggestion))
+                })
         })
 }
 
