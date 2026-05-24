@@ -1201,8 +1201,8 @@ fn has_unquoted_shell_control(command: &str) -> bool {
             (Some(q), c) if c == q => quote = None,
             (Some(_), _) => {}
             (None, '\'' | '"') => quote = Some(ch),
-            (None, '|' | '<' | '>' | ';') => return true,
-            (None, '&') if chars.peek() == Some(&'&') => return true,
+            (None, '|' | '<' | '>' | ';' | '&' | '`') => return true,
+            (None, '$') if chars.peek() == Some(&'(') => return true,
             _ => {}
         }
     }
