@@ -1166,6 +1166,118 @@ fn is_rg_files_command(command: &str) -> bool {
         && tokens.iter().any(|token| token.text == "--files")
 }
 
+fn is_safe_wrapper_tool(name: &str) -> bool {
+    matches!(
+        name,
+        "git"
+            | "cargo"
+            | "npm"
+            | "pytest"
+            | "busted"
+            | "luacheck"
+            | "dotnet"
+            | "pnpm"
+            | "pip"
+            | "go"
+            | "docker"
+            | "npx"
+            | "vitest"
+            | "jest"
+            | "tsc"
+            | "ruff"
+            | "mypy"
+            | "playwright"
+            | "gradlew"
+            | "curl"
+            | "ls"
+    )
+}
+
+fn has_unquoted_shell_control(command: &str) -> bool {
+    let mut quote = None;
+    let mut chars = command.chars().peekable();
+    while let Some(ch) = chars.next() {
+        match (quote, ch) {
+            (Some(q), c) if c == q => quote = None,
+            (Some(_), _) => {}
+            (None, '\'' | '"') => quote = Some(ch),
+            (None, '|' | '<' | '>' | ';') => return true,
+            (None, '&') if chars.peek() == Some(&'&') => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+fn is_single_simple_command(command: &str) -> bool {
+    !command.contains('\n') && !has_unquoted_shell_control(command)
+}
+
+fn token_texts(tokens: &[Token]) -> Vec<&str> {
+    tokens.iter().map(|token| token.text.as_str()).collect()
+}
+
+fn same_command_tokens(original: &[Token], suggestion: &[Token]) -> bool {
+    suggestion.len() == original.len() + 1
+        && command_name(&suggestion[0].text) == "rtk"
+        && command_name(&suggestion[1].text) == command_name(&original[0].text)
+        && token_texts(&suggestion[2..]) == token_texts(&original[1..])
+}
+
+fn same_rtk_pytest_tokens(args: &[Token], suggestion: &[Token]) -> bool {
+    suggestion.len() == args.len() + 2
+        && command_name(&suggestion[0].text) == "rtk"
+        && command_name(&suggestion[1].text) == "pytest"
+        && token_texts(&suggestion[2..]) == token_texts(args)
+}
+
+fn classify_external_rewrite(original: &str, suggestion: String) -> HookAction {
+    if is_safe_external_rewrite(original, &suggestion) {
+        HookAction::AutoRewrite(suggestion)
+    } else {
+        HookAction::DenySuggestion(suggestion)
+    }
+}
+
+fn is_safe_external_rewrite(original: &str, suggestion: &str) -> bool {
+    if is_git_diff_pathspec_command(original)
+        || !suggestion.starts_with("rtk ")
+        || !is_single_simple_command(original)
+        || !is_single_simple_command(suggestion)
+    {
+        return false;
+    }
+
+    let original_tokens = tokenize(original);
+    let suggestion_tokens = tokenize(suggestion);
+    let Some(first) = original_tokens
+        .first()
+        .map(|token| command_name(&token.text))
+    else {
+        return false;
+    };
+
+    if is_safe_wrapper_tool(&first) && same_command_tokens(&original_tokens, &suggestion_tokens) {
+        return true;
+    }
+
+    if first == "python"
+        && python_pytest_args(&original_tokens).is_some()
+        && same_rtk_pytest_tokens(&original_tokens[3..], &suggestion_tokens)
+    {
+        return true;
+    }
+
+    if first == "uv"
+        && uv_pytest_args(&original_tokens).is_some()
+        && same_rtk_pytest_tokens(&original_tokens[3..], &suggestion_tokens)
+    {
+        return true;
+    }
+
+    false
+}
+
 fn local_rtk_miss_fallback(command: &str) -> Option<String> {
     let tokens = tokenize(command);
     let first = tokens.first().map(|token| command_name(&token.text));
@@ -1181,11 +1293,7 @@ fn local_rtk_miss_fallback(command: &str) -> Option<String> {
             let args = uv_pytest_args(&tokens)?;
             Some(format!("rtk pytest{args}"))
         }
-        Some(
-            "git" | "cargo" | "npm" | "pytest" | "busted" | "luacheck" | "dotnet" | "pnpm" | "pip"
-            | "go" | "docker" | "npx" | "vitest" | "jest" | "tsc" | "ruff" | "mypy" | "playwright"
-            | "gradlew" | "curl",
-        ) => Some(format!("rtk {command}")),
+        Some(name) if is_safe_wrapper_tool(name) && name != "ls" => Some(format!("rtk {command}")),
         _ => None,
     }
 }
