@@ -94,8 +94,10 @@ Rewrite action order:
 2. Reject destructive or mutating command shapes.
 3. Auto-rewrite local high-confidence Windows/PowerShell and Unix read/search
    forms when semantics are equivalent.
-4. Keep external `rtk rewrite`, wrapper-heavy rewrites, and broad noisy-tool
-   fallback suggestions as deny guidance until they are execution-proved.
+4. Classify external `rtk rewrite` and broad noisy-tool fallback suggestions.
+   Simple argument-preserving `rtk <tool> ...` wrappers for known safe wrapper
+   tools become auto-rewrites; wrapper-heavy or unproved suggestions stay deny
+   guidance.
 5. Return no output when parsing is ambiguous.
 
 ## What It Rewrites
@@ -115,19 +117,21 @@ Rewrite action order:
   auto-rewritten only when the hook can preserve semantics.
 - Generic cross-platform tools are delegated to `rtk rewrite`, such as
   `git status --short` to `rtk git status --short` and `ls src` to `rtk ls src`.
-  Delegated rewrites stay as deny guidance in the first `updatedInput` release.
-  Raw `git diff -- path...` is left alone because the current RTK git wrapper
-  does not preserve Git pathspec separator behavior for that form.
+  Simple single-command, argument-preserving wrappers for the safe wrapper tool
+  set are auto-rewritten through `updatedInput.command`. Raw `git diff --
+  path...` is left alone because the current RTK git wrapper does not preserve
+  Git pathspec separator behavior for that form.
 - If `rtk rewrite` is unavailable or returns no suggestion, a small local
   fallback preserves legacy suggestions for common noisy tools such as `git`,
   `cargo`, `npm`, `pytest`, `busted`, `luacheck`, `dotnet`, `pnpm`, `pip`, `go`,
   `docker`, `npx`, `vitest`, `jest`, `tsc`, `ruff`, `mypy`, `playwright`,
-  `gradlew`, and `curl`.
+  `gradlew`, and `curl`. Fallback suggestions pass through the same safe
+  wrapper classifier as external `rtk rewrite` suggestions.
 - RTK's generic safety skips are preserved. For example, `gh` commands with
   `--json`, `--jq`, or `--template` are left alone so structured output remains
   raw.
 - `python -m pytest ...` and `uv run pytest ...` become direct `rtk pytest ...`
-  suggestions.
+  auto-rewrites when the classifier proves the pytest arguments are preserved.
 - Direct and PowerShell-wrapped `Get-Content` reads, including `gc`, `cat`, and
   `type`, become `rtk read`, preserving top or tail windows with `--max-lines`
   and `--tail-lines`.
