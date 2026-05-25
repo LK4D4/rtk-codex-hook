@@ -7,6 +7,8 @@ All notable changes to this project will be documented in this file.
 - Make installed `PreToolUse` config matcherless and preserve full shell-like
   tool inputs when returning `updatedInput`, so Windows/Desktop shell tools can
   be rewritten without dropping arguments such as `workdir`.
+- Clarify that installers must migrate or add a broad matcherless hook group
+  even when older scoped matcher groups already contain the same command.
 
 ## v0.1.7 - 2026-05-23
 

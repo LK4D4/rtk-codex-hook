@@ -33,8 +33,10 @@ local repo checkout.
      route shell execution through shell-like tool names. Let this hook receive
      `PreToolUse` events broadly; the binary only rewrites recognized shell-like
      command inputs and fails open for other tools.
-   - Add this handler only if the exact command is absent anywhere under
-     `hooks.PreToolUse[].hooks[]`:
+   - Ensure there is one broad `PreToolUse` matcher group: no `matcher`, an
+     empty-string matcher, or `"matcher": "*"`.
+   - Add this handler to that broad group only if the exact command is absent
+     from the broad group's inner `hooks` array:
 
      ```json
      {
@@ -48,10 +50,15 @@ local repo checkout.
      }
      ```
 
-   - If a broad `PreToolUse` matcher group already exists with no `matcher`, an
-     empty-string matcher, or `"matcher": "*"`, append the command handler to
-     that group's inner `hooks` array instead of adding a duplicate matcher
-     group.
+   - Older installs may already contain the same command under a scoped matcher
+     such as `"PowerShell"`, `"^PowerShell$"`, `"Bash"`, or `"^Bash$"`. Do not
+     treat those scoped entries as satisfying the broad install. Add the handler
+     to the broad group anyway, so shell-like tool names outside the scoped
+     matcher still reach the binary.
+   - If a scoped matcher group contains only this hook command, prefer migrating
+     it by removing the `matcher` instead of adding a duplicate group. If the
+     scoped group contains other handlers, leave it intact and add this handler
+     to the broad group.
    - Do not add direct `hooks.PreToolUse[].command` entries.
    - The hook binary owns runtime `updatedInput` responses; `hooks.json` config
      shape does not change for command rewrites.

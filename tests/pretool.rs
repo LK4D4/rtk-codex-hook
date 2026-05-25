@@ -220,34 +220,52 @@ fn assert_rewrite(command: &str, rewritten: &str) {
 
 #[test]
 fn shell_like_tool_inputs_rewrite_without_losing_other_arguments() {
-    let output = run_hook(&hook_payload_for_tool(
+    for tool_name in [
+        "Bash",
+        "shell_command",
+        "exec_command",
         "mcp__functions__shell_command",
-        serde_json::json!({
-            "command": "rg -n staleAlias src",
-            "workdir": "C:\\work",
-            "timeout_ms": 30000
-        }),
-    ));
-    let value: serde_json::Value =
-        serde_json::from_str(&output).unwrap_or_else(|err| panic!("invalid json {err}: {output}"));
-    let hook = &value["hookSpecificOutput"];
+        "mcp__functions__exec_command",
+        "functions.shell_command",
+        "functions.exec_command",
+    ] {
+        let output = run_hook(&hook_payload_for_tool(
+            tool_name,
+            serde_json::json!({
+                "command": "rg -n staleAlias src",
+                "workdir": "C:\\work",
+                "timeout_ms": 30000
+            }),
+        ));
+        let value: serde_json::Value = serde_json::from_str(&output)
+            .unwrap_or_else(|err| panic!("invalid json {err} for {tool_name}: {output}"));
+        let hook = &value["hookSpecificOutput"];
 
-    assert_eq!("allow", hook["permissionDecision"].as_str().unwrap());
-    assert_eq!(
-        r#"rtk grep -n "staleAlias" src"#,
-        hook["updatedInput"]["command"].as_str().unwrap()
-    );
-    assert_eq!(
-        "C:\\work",
-        hook["updatedInput"]["workdir"].as_str().unwrap()
-    );
-    assert_eq!(30000, hook["updatedInput"]["timeout_ms"].as_i64().unwrap());
+        assert_eq!("allow", hook["permissionDecision"].as_str().unwrap());
+        assert_eq!(
+            r#"rtk grep -n "staleAlias" src"#,
+            hook["updatedInput"]["command"].as_str().unwrap()
+        );
+        assert_eq!(
+            "C:\\work",
+            hook["updatedInput"]["workdir"].as_str().unwrap()
+        );
+        assert_eq!(30000, hook["updatedInput"]["timeout_ms"].as_i64().unwrap());
+    }
 
-    let non_shell_output = run_hook(&hook_payload_for_tool(
+    for tool_name in [
         "mcp__browser__click",
-        serde_json::json!({ "command": "rg -n staleAlias src" }),
-    ));
-    assert_eq!("", non_shell_output.trim());
+        "mcp__browser__not_shell_command",
+        "mcp__browser__shell_command_preview",
+        "functions.not_shell_command",
+        "functions.shell_command_preview",
+    ] {
+        let output = run_hook(&hook_payload_for_tool(
+            tool_name,
+            serde_json::json!({ "command": "rg -n staleAlias src" }),
+        ));
+        assert_eq!("", output.trim(), "expected no output for {tool_name}");
+    }
 }
 
 #[test]
