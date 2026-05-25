@@ -297,8 +297,14 @@ fn generic_rtk_rewrite_fallbacks_apply_to_common_tools() {
     assert_rewrite("pytest -q", "rtk pytest -q");
     assert_rewrite("docker ps", "rtk docker ps");
     assert_rewrite("curl --version", "rtk curl --version");
+    assert_rewrite("wc -l docs/notes.md", "rtk wc -l docs/notes.md");
+    assert_rewrite(
+        "wc -c README.md src/main.rs",
+        "rtk wc -c README.md src/main.rs",
+    );
     assert_no_output("git diff -- src/rewrite.rs tests/pretool.rs");
     assert_no_output("gh pr view --json title");
+    assert_no_output("wc -l docs/notes.md && echo done");
 }
 
 #[test]

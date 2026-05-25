@@ -1194,6 +1194,7 @@ fn is_safe_wrapper_tool(name: &str) -> bool {
             | "playwright"
             | "gradlew"
             | "curl"
+            | "wc"
             | "ls"
     )
 }

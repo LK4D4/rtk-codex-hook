@@ -128,7 +128,7 @@ Rewrite action order:
   fallback preserves legacy suggestions for common noisy tools such as `git`,
   `cargo`, `npm`, `pytest`, `busted`, `luacheck`, `dotnet`, `pnpm`, `pip`, `go`,
   `docker`, `npx`, `vitest`, `jest`, `tsc`, `ruff`, `mypy`, `playwright`,
-  `gradlew`, and `curl`. Fallback suggestions pass through the same safe
+  `gradlew`, `curl`, and `wc`. Fallback suggestions pass through the same safe
   wrapper classifier as external `rtk rewrite` suggestions.
 - RTK's generic safety skips are preserved. For example, `gh` commands with
   `--json`, `--jq`, or `--template` are left alone so structured output remains
