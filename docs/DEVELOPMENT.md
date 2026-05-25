@@ -118,9 +118,12 @@ Rewrite action order:
 - Generic cross-platform tools are delegated to `rtk rewrite`, such as
   `git status --short` to `rtk git status --short` and `ls src` to `rtk ls src`.
   Simple single-command, argument-preserving wrappers for the safe wrapper tool
-  set are auto-rewritten through `updatedInput.command`. Raw `git diff --
-  path...` is left alone because the current RTK git wrapper does not preserve
-  Git pathspec separator behavior for that form.
+  set are auto-rewritten through `updatedInput.command`. Git is limited to
+  read-only forms such as `status`, `log`, `show`, and `diff`; mutating forms
+  such as `add`, `commit`, `reset --hard`, `clean`, `push`, `merge`, `rebase`,
+  and `cherry-pick` are left alone. Raw `git diff -- path...` is left alone
+  because the current RTK git wrapper does not preserve Git pathspec separator
+  behavior for that form.
 - If `rtk rewrite` is unavailable or returns no suggestion, a small local
   fallback preserves legacy suggestions for common noisy tools such as `git`,
   `cargo`, `npm`, `pytest`, `busted`, `luacheck`, `dotnet`, `pnpm`, `pip`, `go`,

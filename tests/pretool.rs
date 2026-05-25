@@ -283,6 +283,14 @@ fn powershell_mutations_are_noops() {
 #[test]
 fn generic_rtk_rewrite_fallbacks_apply_to_common_tools() {
     assert_rewrite("git status --short", "rtk git status --short");
+    assert_rewrite(
+        "git branch --all --verbose --no-abbrev",
+        "rtk git branch --all --verbose --no-abbrev",
+    );
+    assert_rewrite(
+        "git branch -r --contains HEAD",
+        "rtk git branch -r --contains HEAD",
+    );
     assert_rewrite("ls src", "rtk ls src");
     assert_rewrite("cargo test", "rtk cargo test");
     assert_rewrite("npm test", "rtk npm test");
@@ -291,6 +299,20 @@ fn generic_rtk_rewrite_fallbacks_apply_to_common_tools() {
     assert_rewrite("curl --version", "rtk curl --version");
     assert_no_output("git diff -- src/rewrite.rs tests/pretool.rs");
     assert_no_output("gh pr view --json title");
+}
+
+#[test]
+fn mutating_git_commands_do_not_auto_rewrite() {
+    assert_no_output("git add docs/ARCHITECTURE.md");
+    assert_no_output("git commit --amend --no-edit");
+    assert_no_output("git reset --hard develop");
+    assert_no_output("git clean -fd");
+    assert_no_output("git push");
+    assert_no_output("git merge --ff-only main");
+    assert_no_output("git rebase main");
+    assert_no_output("git cherry-pick HEAD");
+    assert_no_output("git branch --unset-upstream");
+    assert_no_output("git branch --set-upstream-to origin/main");
 }
 
 #[test]

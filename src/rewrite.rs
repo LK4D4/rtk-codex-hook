@@ -1175,8 +1175,7 @@ fn is_rg_files_command(command: &str) -> bool {
 fn is_safe_wrapper_tool(name: &str) -> bool {
     matches!(
         name,
-        "git"
-            | "cargo"
+        "cargo"
             | "npm"
             | "pytest"
             | "busted"
@@ -1197,6 +1196,74 @@ fn is_safe_wrapper_tool(name: &str) -> bool {
             | "curl"
             | "ls"
     )
+}
+
+fn is_safe_wrapper_invocation(tokens: &[Token]) -> bool {
+    let Some(first) = tokens.first().map(|token| command_name(&token.text)) else {
+        return false;
+    };
+
+    if first == "git" {
+        return is_safe_git_command(tokens);
+    }
+
+    is_safe_wrapper_tool(&first)
+}
+
+fn is_safe_git_command(tokens: &[Token]) -> bool {
+    if tokens.len() < 2 || command_name(&tokens[0].text) != "git" {
+        return false;
+    }
+
+    match command_name(&tokens[1].text).as_str() {
+        "status" | "log" | "show" | "diff" | "grep" | "blame" | "ls-files" | "ls-tree"
+        | "rev-parse" | "merge-base" | "describe" | "show-ref" | "reflog" => true,
+        "branch" => is_read_only_git_branch(&tokens[2..]),
+        "remote" => tokens[2..]
+            .iter()
+            .all(|token| matches!(token.text.as_str(), "-v" | "--verbose")),
+        "tag" => is_read_only_git_tag(&tokens[2..]),
+        _ => false,
+    }
+}
+
+fn is_read_only_git_branch(args: &[Token]) -> bool {
+    if args.is_empty() {
+        return true;
+    }
+
+    let mut index = 0;
+    while index < args.len() {
+        let arg = args[index].text.as_str();
+        match arg {
+            "-a" | "--all" | "-r" | "--remotes" | "-v" | "--verbose" | "-vv" | "--show-current"
+            | "--no-abbrev" | "--list" | "-l" => {
+                index += 1;
+            }
+            "--contains" | "--merged" | "--no-merged" | "--points-at" => {
+                index += 1;
+                if args
+                    .get(index)
+                    .is_some_and(|token| !token.text.starts_with('-'))
+                {
+                    index += 1;
+                }
+            }
+            _ => return false,
+        }
+    }
+    true
+}
+
+fn is_read_only_git_tag(args: &[Token]) -> bool {
+    if args.is_empty() {
+        return true;
+    }
+
+    args.iter().all(|token| {
+        let arg = token.text.as_str();
+        arg.starts_with('-') && !matches!(arg, "-d" | "--delete" | "-f" | "--force")
+    })
 }
 
 fn has_unquoted_shell_control(command: &str) -> bool {
@@ -1270,7 +1337,9 @@ fn is_safe_external_rewrite(original: &str, suggestion: &str) -> bool {
         return false;
     };
 
-    if is_safe_wrapper_tool(&first) && same_command_tokens(&original_tokens, &suggestion_tokens) {
+    if is_safe_wrapper_invocation(&original_tokens)
+        && same_command_tokens(&original_tokens, &suggestion_tokens)
+    {
         return true;
     }
 
@@ -1306,6 +1375,7 @@ fn local_rtk_miss_fallback(command: &str) -> Option<String> {
             let args = uv_pytest_args(&tokens)?;
             Some(format!("rtk pytest{args}"))
         }
+        Some("git") if is_safe_git_command(&tokens) => Some(format!("rtk {command}")),
         Some(name) if is_safe_wrapper_tool(name) && name != "ls" => Some(format!("rtk {command}")),
         _ => None,
     }
@@ -1385,10 +1455,21 @@ fn rtk_rewrite(command: &str) -> Option<String> {
 }
 
 fn safe_external_rtk_rewrite(command: &str) -> Option<String> {
-    if blocks_external_posix_rewrite(command) || is_git_diff_pathspec_command(command) {
+    if blocks_external_posix_rewrite(command)
+        || is_git_diff_pathspec_command(command)
+        || blocks_external_git_rewrite(command)
+    {
         return None;
     }
     rtk_rewrite(command)
+}
+
+fn blocks_external_git_rewrite(command: &str) -> bool {
+    let tokens = tokenize(command);
+    tokens
+        .first()
+        .is_some_and(|token| command_name(&token.text) == "git")
+        && !is_safe_git_command(&tokens)
 }
 
 fn blocks_external_posix_rewrite(command: &str) -> bool {
