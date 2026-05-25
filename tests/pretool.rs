@@ -4,17 +4,19 @@ use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 
 fn hook_payload(command: &str) -> String {
+    hook_payload_for_tool("Bash", serde_json::json!({ "command": command }))
+}
+
+fn hook_payload_for_tool(tool_name: &str, tool_input: serde_json::Value) -> String {
     serde_json::json!({
         "session_id": "test-session",
         "transcript_path": null,
         "cwd": "C:\\work",
         "hook_event_name": "PreToolUse",
         "turn_id": "test-turn",
-        "tool_name": "Bash",
+        "tool_name": tool_name,
         "tool_use_id": "test-tool",
-        "tool_input": {
-            "command": command
-        }
+        "tool_input": tool_input
     })
     .to_string()
 }
@@ -214,6 +216,38 @@ fn assert_rewrite(command: &str, rewritten: &str) {
         hook.get("permissionDecisionReason").is_none(),
         "allow rewrite should not include permissionDecisionReason: {output}"
     );
+}
+
+#[test]
+fn shell_like_tool_inputs_rewrite_without_losing_other_arguments() {
+    let output = run_hook(&hook_payload_for_tool(
+        "mcp__functions__shell_command",
+        serde_json::json!({
+            "command": "rg -n staleAlias src",
+            "workdir": "C:\\work",
+            "timeout_ms": 30000
+        }),
+    ));
+    let value: serde_json::Value =
+        serde_json::from_str(&output).unwrap_or_else(|err| panic!("invalid json {err}: {output}"));
+    let hook = &value["hookSpecificOutput"];
+
+    assert_eq!("allow", hook["permissionDecision"].as_str().unwrap());
+    assert_eq!(
+        r#"rtk grep -n "staleAlias" src"#,
+        hook["updatedInput"]["command"].as_str().unwrap()
+    );
+    assert_eq!(
+        "C:\\work",
+        hook["updatedInput"]["workdir"].as_str().unwrap()
+    );
+    assert_eq!(30000, hook["updatedInput"]["timeout_ms"].as_i64().unwrap());
+
+    let non_shell_output = run_hook(&hook_payload_for_tool(
+        "mcp__browser__click",
+        serde_json::json!({ "command": "rg -n staleAlias src" }),
+    ));
+    assert_eq!("", non_shell_output.trim());
 }
 
 #[test]

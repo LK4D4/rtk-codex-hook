@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Make installed `PreToolUse` config matcherless and preserve full shell-like
+  tool inputs when returning `updatedInput`, so Windows/Desktop shell tools can
+  be rewritten without dropping arguments such as `workdir`.
+
 ## v0.1.7 - 2026-05-23
 
 - Fail open for invalid already-RTK hook suggestions instead of suggesting

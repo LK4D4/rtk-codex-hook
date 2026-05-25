@@ -73,6 +73,10 @@ For safe equivalent rewrites, allow output stays compact:
 {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"command":"<rewrite>"}}}
 ```
 
+When Codex sends a shell-like tool input with additional arguments, such as
+`workdir` or `timeout_ms`, the hook preserves those fields and only replaces
+`updatedInput.command`.
+
 For non-equivalent guidance that should stay visible, deny output stays compact:
 
 ```json

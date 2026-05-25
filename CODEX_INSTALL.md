@@ -28,15 +28,16 @@ local repo checkout.
      matcher group has optional `matcher` and required `hooks` array. Each
      handler in that inner `hooks` array must include `type: "command"` and
      `command`.
-   - Use the matcher for the Codex shell tool on the target platform:
-     - Windows: `PowerShell`
-     - Unix: `Bash`
+   - Do not set a platform-specific matcher. Codex currently reports shell-like
+     commands to hooks as `Bash`, even on Windows, and other Codex surfaces may
+     route shell execution through shell-like tool names. Let this hook receive
+     `PreToolUse` events broadly; the binary only rewrites recognized shell-like
+     command inputs and fails open for other tools.
    - Add this handler only if the exact command is absent anywhere under
      `hooks.PreToolUse[].hooks[]`:
 
      ```json
      {
-       "matcher": "PowerShell",
        "hooks": [
          {
            "type": "command",
@@ -47,10 +48,10 @@ local repo checkout.
      }
      ```
 
-   - On Unix, use `"matcher": "Bash"` in the same shape.
-   - If a `PreToolUse` matcher group for the platform matcher already exists,
-     append the command handler to that group's inner `hooks` array instead of
-     adding a duplicate matcher group.
+   - If a broad `PreToolUse` matcher group already exists with no `matcher`, an
+     empty-string matcher, or `"matcher": "*"`, append the command handler to
+     that group's inner `hooks` array instead of adding a duplicate matcher
+     group.
    - Do not add direct `hooks.PreToolUse[].command` entries.
    - The hook binary owns runtime `updatedInput` responses; `hooks.json` config
      shape does not change for command rewrites.

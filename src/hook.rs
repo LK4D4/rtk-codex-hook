@@ -3,12 +3,8 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 struct Payload {
     hook_event_name: Option<String>,
-    tool_input: Option<ToolInput>,
-}
-
-#[derive(Deserialize)]
-struct ToolInput {
-    command: Option<String>,
+    tool_name: Option<String>,
+    tool_input: Option<serde_json::Value>,
 }
 
 pub fn handle_stdin(stdin: &str) -> Option<String> {
@@ -22,7 +18,12 @@ pub fn handle_stdin(stdin: &str) -> Option<String> {
         return None;
     }
 
-    let command = payload.tool_input?.command?;
+    if !is_shell_like_tool(payload.tool_name.as_deref()) {
+        return None;
+    }
+
+    let tool_input = payload.tool_input?;
+    let command = tool_input.get("command")?.as_str()?;
     let command = command.trim();
     if command.is_empty() {
         return None;
@@ -31,7 +32,10 @@ pub fn handle_stdin(stdin: &str) -> Option<String> {
     match crate::rewrite::action(command)? {
         crate::rewrite::HookAction::AutoRewrite(rewrite) => {
             log(&format!("allow original=[{command}] rewrite=[{rewrite}]"));
-            Some(allow_json(&rewrite))
+            Some(allow_json(updated_input_with_command(
+                &tool_input,
+                &rewrite,
+            )))
         }
         crate::rewrite::HookAction::DenySuggestion(suggestion) => {
             log(&format!(
@@ -42,14 +46,40 @@ pub fn handle_stdin(stdin: &str) -> Option<String> {
     }
 }
 
-fn allow_json(command: &str) -> String {
+fn is_shell_like_tool(tool_name: Option<&str>) -> bool {
+    let Some(tool_name) = tool_name else {
+        return false;
+    };
+
+    tool_name == "Bash"
+        || tool_name == "shell_command"
+        || tool_name == "exec_command"
+        || tool_name.ends_with("__shell_command")
+        || tool_name.ends_with("__exec_command")
+        || tool_name.ends_with(".shell_command")
+        || tool_name.ends_with(".exec_command")
+}
+
+fn updated_input_with_command(tool_input: &serde_json::Value, command: &str) -> serde_json::Value {
+    match tool_input {
+        serde_json::Value::Object(fields) => {
+            let mut fields = fields.clone();
+            fields.insert(
+                "command".to_string(),
+                serde_json::Value::String(command.to_string()),
+            );
+            serde_json::Value::Object(fields)
+        }
+        _ => serde_json::json!({ "command": command }),
+    }
+}
+
+fn allow_json(updated_input: serde_json::Value) -> String {
     serde_json::json!({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "allow",
-            "updatedInput": {
-                "command": command
-            }
+            "updatedInput": updated_input
         }
     })
     .to_string()
