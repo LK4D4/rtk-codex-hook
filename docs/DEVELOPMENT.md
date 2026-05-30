@@ -107,11 +107,13 @@ Rewrite action order:
 ## What It Rewrites
 
 - Already preferred RTK commands are left alone, such as `rtk git status --short`.
-  Invalid `rtk read` forms with invented window flags such as `--line`,
-  `--lines`, `--range`, `--start-line`, `--start`, `--from`, `--to`, or
-  `--line-number`, plus path range forms like `file.md:35-160`, are denied with
-  `rtk read --help` so agents do not confuse RTK parse fallback errors with a
-  missing `rtk read` command.
+  Invalid `rtk read` forms that describe exact top-of-file windows, such as
+  `--line 1-120`, `--lines 1:120`, `--start-line 1 --max-lines 120`, or
+  `file.md:1-120`, are denied with corrected `rtk read <file> --max-lines N`
+  suggestions. Middle-of-file window forms with invented flags such as
+  `--range 35:160`, `--start-line 35`, `--from 35 --to 160`, or path ranges
+  like `file.md:35-160` are denied with `rtk read --help` so agents do not
+  confuse RTK parse fallback errors with a missing `rtk read` command.
 - Invalid `rtk grep` forms that put ripgrep context flags such as `-C N` or
   `--context N` before the pattern are denied with a corrected suggestion that
   moves those flags after `--`.

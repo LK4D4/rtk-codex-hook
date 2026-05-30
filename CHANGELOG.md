@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Correct invalid top-of-file `rtk read` window forms such as `--line 1-120`
+  or `--start-line 1 --max-lines N` to `--max-lines N`.
 - Rewrite read-only `git -C <path> ...` commands through RTK while continuing to
   leave mutating `git -C` commands and pathspec `git diff -- ...` forms alone.
 - Make installed `PreToolUse` config matcherless and preserve full shell-like

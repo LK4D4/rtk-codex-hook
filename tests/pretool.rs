@@ -294,16 +294,42 @@ fn already_good_commands_are_noops() {
 
 #[test]
 fn invalid_rtk_read_flags_suggest_help() {
-    for command in [
+    assert_deny(
         "rtk read src/client/source.lua --line 1 --lines 650",
+        "rtk read src/client/source.lua --max-lines 650",
+    );
+    assert_deny(
         "rtk read src/ui.lua --line 1-120",
+        "rtk read src/ui.lua --max-lines 120",
+    );
+    assert_deny(
+        "rtk read spec/suwayomi_i18n_spec.lua --lines 1:260",
+        "rtk read spec/suwayomi_i18n_spec.lua --max-lines 260",
+    );
+    assert_deny(
+        "rtk read docs/notes.md --start-line 1 --max-lines 110",
+        "rtk read docs/notes.md --max-lines 110",
+    );
+    assert_deny(
+        "rtk read docs/notes.md --start-line=1 --max-lines 110",
+        "rtk read docs/notes.md --max-lines 110",
+    );
+    assert_deny(
+        "rtk read docs/notes.md --from 1 --to 190",
+        "rtk read docs/notes.md --max-lines 190",
+    );
+    assert_deny(
+        "rtk read docs/notes.md:1-120",
+        "rtk read docs/notes.md --max-lines 120",
+    );
+
+    for command in [
         "rtk read src/ui.lua --range 130:310",
         "rtk read docs/notes.md:35-160",
         "rtk read src/ui.lua:130",
         "rtk read docs/notes.md --start-line 130 --max-lines 60",
         "rtk read docs/notes.md --start-line=130 --max-lines 60",
         "rtk read docs/notes.md --start 130 --max-lines 60",
-        "rtk read docs/notes.md --from 130 --to 190",
         "rtk read docs/notes.md --line-number --max-lines 80",
     ] {
         assert_deny(command, "rtk read --help");

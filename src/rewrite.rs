@@ -87,6 +87,10 @@ fn invalid_rtk_read_redirect(command: &str) -> Option<String> {
         return None;
     }
 
+    if let Some(suggestion) = corrected_rtk_read_top_window(&tokens) {
+        return Some(suggestion);
+    }
+
     tokens
         .iter()
         .skip(2)
@@ -106,6 +110,190 @@ fn invalid_rtk_read_redirect(command: &str) -> Option<String> {
                 || looks_like_rtk_read_path_range(&token.text)
         })
         .then(|| "rtk read --help".to_string())
+}
+
+fn corrected_rtk_read_top_window(tokens: &[Token]) -> Option<String> {
+    let path_index = rtk_read_path_index(tokens)?;
+    let mut path = tokens[path_index].text.clone();
+    let mut start = None;
+    let mut end = None;
+    let mut max_lines = None;
+
+    if let Some((path_without_range, (range_start, range_end))) = split_path_line_range(&path) {
+        path = path_without_range;
+        start = Some(range_start);
+        end = Some(range_end);
+    }
+
+    let mut index = 2;
+    while index < tokens.len() {
+        if index == path_index {
+            index += 1;
+            continue;
+        }
+
+        let token = tokens[index].text.as_str();
+        match token {
+            "--line" | "--lines" | "--range" => {
+                if let Some(value) = tokens.get(index + 1).map(|token| token.text.as_str()) {
+                    apply_rtk_read_window_value(token, value, &mut start, &mut end, &mut max_lines);
+                }
+                index += 2;
+            }
+            "--start-line" | "--start" | "--from" => {
+                start = tokens
+                    .get(index + 1)
+                    .and_then(|token| parse_positive_u64(&token.text));
+                index += 2;
+            }
+            "--to" | "--end" => {
+                end = tokens
+                    .get(index + 1)
+                    .and_then(|token| parse_positive_u64(&token.text));
+                index += 2;
+            }
+            "--max-lines" => {
+                max_lines = tokens
+                    .get(index + 1)
+                    .and_then(|token| parse_positive_u64(&token.text));
+                index += 2;
+            }
+            _ if token.starts_with("--line=") => {
+                apply_rtk_read_window_value(
+                    "--line",
+                    token.trim_start_matches("--line="),
+                    &mut start,
+                    &mut end,
+                    &mut max_lines,
+                );
+                index += 1;
+            }
+            _ if token.starts_with("--lines=") => {
+                apply_rtk_read_window_value(
+                    "--lines",
+                    token.trim_start_matches("--lines="),
+                    &mut start,
+                    &mut end,
+                    &mut max_lines,
+                );
+                index += 1;
+            }
+            _ if token.starts_with("--range=") => {
+                apply_rtk_read_window_value(
+                    "--range",
+                    token.trim_start_matches("--range="),
+                    &mut start,
+                    &mut end,
+                    &mut max_lines,
+                );
+                index += 1;
+            }
+            _ if token.starts_with("--start-line=") => {
+                start = parse_positive_u64(token.trim_start_matches("--start-line="));
+                index += 1;
+            }
+            _ if token.starts_with("--start=") => {
+                start = parse_positive_u64(token.trim_start_matches("--start="));
+                index += 1;
+            }
+            _ if token.starts_with("--from=") => {
+                start = parse_positive_u64(token.trim_start_matches("--from="));
+                index += 1;
+            }
+            _ if token.starts_with("--to=") => {
+                end = parse_positive_u64(token.trim_start_matches("--to="));
+                index += 1;
+            }
+            _ => index += 1,
+        }
+    }
+
+    let max_lines = if start == Some(1) {
+        end.or(max_lines)
+    } else {
+        None
+    }?;
+
+    Some(format!(
+        "rtk read {} --max-lines {max_lines}",
+        quote_arg(&path)
+    ))
+}
+
+fn rtk_read_path_index(tokens: &[Token]) -> Option<usize> {
+    let mut index = 2;
+    while index < tokens.len() {
+        let token = tokens[index].text.as_str();
+        if rtk_read_option_takes_value(token) {
+            index += 2;
+        } else if token.starts_with('-') {
+            index += 1;
+        } else {
+            return Some(index);
+        }
+    }
+    None
+}
+
+fn rtk_read_option_takes_value(token: &str) -> bool {
+    matches!(
+        token,
+        "--line"
+            | "--lines"
+            | "--range"
+            | "--start-line"
+            | "--start"
+            | "--from"
+            | "--to"
+            | "--end"
+            | "--max-lines"
+            | "--tail-lines"
+            | "--level"
+            | "-l"
+    )
+}
+
+fn apply_rtk_read_window_value(
+    option: &str,
+    value: &str,
+    start: &mut Option<u64>,
+    end: &mut Option<u64>,
+    max_lines: &mut Option<u64>,
+) {
+    if let Some((range_start, range_end)) = parse_line_range(value) {
+        *start = Some(range_start);
+        *end = Some(range_end);
+    } else if let Some(number) = parse_positive_u64(value) {
+        match option {
+            "--line" => *start = Some(number),
+            "--lines" => {
+                if start.is_none() {
+                    *start = Some(1);
+                }
+                *max_lines = Some(number);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn split_path_line_range(value: &str) -> Option<(String, (u64, u64))> {
+    let (path, range) = value.rsplit_once(':')?;
+    Some((path.to_string(), parse_line_range(range)?))
+}
+
+fn parse_line_range(value: &str) -> Option<(u64, u64)> {
+    let (start, end) = value.split_once(':').or_else(|| value.split_once('-'))?;
+    Some((parse_positive_u64(start)?, parse_positive_u64(end)?))
+}
+
+fn parse_positive_u64(value: &str) -> Option<u64> {
+    let value = value.trim();
+    if value.is_empty() || !value.chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+    let value = value.parse::<u64>().ok()?;
+    (value > 0).then_some(value)
 }
 
 fn looks_like_rtk_read_path_range(value: &str) -> bool {
