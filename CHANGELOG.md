@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Rewrite read-only `git -C <path> ...` commands through RTK while continuing to
+  leave mutating `git -C` commands and pathspec `git diff -- ...` forms alone.
 - Make installed `PreToolUse` config matcherless and preserve full shell-like
   tool inputs when returning `updatedInput`, so Windows/Desktop shell tools can
   be rewritten without dropping arguments such as `workdir`.

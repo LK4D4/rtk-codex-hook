@@ -120,7 +120,9 @@ Rewrite action order:
 - Windows/PowerShell and Unix shell reads/searches are handled locally first and
   auto-rewritten only when the hook can preserve semantics.
 - Generic cross-platform tools are delegated to `rtk rewrite`, such as
-  `git status --short` to `rtk git status --short` and `ls src` to `rtk ls src`.
+  `git status --short` to `rtk git status --short`, read-only
+  `git -C <path> ...` commands to `rtk git -C <path> ...`, and `ls src` to
+  `rtk ls src`.
   Simple single-command, argument-preserving wrappers for the safe wrapper tool
   set are auto-rewritten through `updatedInput.command`. Git is limited to
   read-only forms such as `status`, `log`, `show`, and `diff`; mutating forms

@@ -1212,20 +1212,37 @@ fn is_safe_wrapper_invocation(tokens: &[Token]) -> bool {
 }
 
 fn is_safe_git_command(tokens: &[Token]) -> bool {
-    if tokens.len() < 2 || command_name(&tokens[0].text) != "git" {
+    let Some(command_index) = git_subcommand_index(tokens) else {
         return false;
-    }
+    };
 
-    match command_name(&tokens[1].text).as_str() {
+    match command_name(&tokens[command_index].text).as_str() {
         "status" | "log" | "show" | "diff" | "grep" | "blame" | "ls-files" | "ls-tree"
         | "rev-parse" | "merge-base" | "describe" | "show-ref" | "reflog" => true,
-        "branch" => is_read_only_git_branch(&tokens[2..]),
-        "remote" => tokens[2..]
+        "branch" => is_read_only_git_branch(&tokens[command_index + 1..]),
+        "remote" => tokens[command_index + 1..]
             .iter()
             .all(|token| matches!(token.text.as_str(), "-v" | "--verbose")),
-        "tag" => is_read_only_git_tag(&tokens[2..]),
+        "tag" => is_read_only_git_tag(&tokens[command_index + 1..]),
         _ => false,
     }
+}
+
+fn git_subcommand_index(tokens: &[Token]) -> Option<usize> {
+    if tokens.len() < 2 || command_name(&tokens[0].text) != "git" {
+        return None;
+    }
+
+    let mut index = 1;
+    while index < tokens.len() {
+        if tokens[index].text == "-C" {
+            index += 2;
+        } else {
+            break;
+        }
+    }
+
+    (index < tokens.len()).then_some(index)
 }
 
 fn is_read_only_git_branch(args: &[Token]) -> bool {
@@ -1384,10 +1401,18 @@ fn local_rtk_miss_fallback(command: &str) -> Option<String> {
 
 fn is_git_diff_pathspec_command(command: &str) -> bool {
     let tokens = tokenize(command);
-    tokens.len() >= 4
-        && command_name(&tokens[0].text) == "git"
-        && tokens.get(1).is_some_and(|token| token.text == "diff")
-        && tokens.iter().skip(2).any(|token| token.text == "--")
+    let Some(command_index) = git_subcommand_index(&tokens) else {
+        return false;
+    };
+
+    tokens.len() >= command_index + 3
+        && tokens
+            .get(command_index)
+            .is_some_and(|token| token.text == "diff")
+        && tokens
+            .iter()
+            .skip(command_index + 1)
+            .any(|token| token.text == "--")
 }
 
 fn python_pytest_args(tokens: &[Token]) -> Option<String> {

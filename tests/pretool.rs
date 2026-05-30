@@ -336,6 +336,14 @@ fn powershell_mutations_are_noops() {
 fn generic_rtk_rewrite_fallbacks_apply_to_common_tools() {
     assert_rewrite("git status --short", "rtk git status --short");
     assert_rewrite(
+        r#"git -C C:\worktree status --short"#,
+        r#"rtk git -C C:\worktree status --short"#,
+    );
+    assert_rewrite(
+        r#"git -C "C:\work tree" rev-parse HEAD"#,
+        r#"rtk git -C "C:\work tree" rev-parse HEAD"#,
+    );
+    assert_rewrite(
         "git branch --all --verbose --no-abbrev",
         "rtk git branch --all --verbose --no-abbrev",
     );
@@ -355,6 +363,7 @@ fn generic_rtk_rewrite_fallbacks_apply_to_common_tools() {
         "rtk wc -c README.md src/main.rs",
     );
     assert_no_output("git diff -- src/rewrite.rs tests/pretool.rs");
+    assert_no_output(r#"git -C C:\worktree diff -- src\main.rs"#);
     assert_no_output("gh pr view --json title");
     assert_no_output("wc -l docs/notes.md && echo done");
 }
@@ -371,6 +380,8 @@ fn mutating_git_commands_do_not_auto_rewrite() {
     assert_no_output("git cherry-pick HEAD");
     assert_no_output("git branch --unset-upstream");
     assert_no_output("git branch --set-upstream-to origin/main");
+    assert_no_output(r#"git -C C:\worktree add src\main.rs"#);
+    assert_no_output(r#"git -C C:\worktree merge --ff-only main"#);
 }
 
 #[test]
